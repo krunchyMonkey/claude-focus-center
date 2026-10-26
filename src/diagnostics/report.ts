@@ -1,5 +1,7 @@
 // Pure diagnostics formatting: no VS Code or filesystem access, so it is unit-testable.
 import type { DiscoveryResult } from '../adapters/claudeSessions/discovery';
+import type { HookStatus } from '../adapters/claudeHooks/installer';
+import { HOOK_EVENTS } from '../adapters/claudeHooks/settings';
 import type { PollStats } from '../adapters/claudeSessions/tailer';
 
 export type CoverageState = 'active' | 'partial' | 'unavailable' | 'not-implemented';
@@ -112,5 +114,22 @@ export function ingestionSection(totalEvents: number, last: PollStats | undefine
       ...(last.deferred > 0 ? [`Deferred to next refresh (byte budget): ${last.deferred} file(s)`] : []),
       ...last.errors.map((e) => `- unreadable: ${e.path} (${e.code})`),
     ],
+  };
+}
+
+/** Hook coverage. Installed hooks are only partial coverage until their events are consumed (issue 05). */
+export function hookCoverage(status: HookStatus): CoverageEntry {
+  const source = 'Claude hooks';
+  if (status.error) {
+    return { source, state: 'unavailable', detail: status.error };
+  }
+  if (status.events.length === 0) {
+    return { source, state: 'unavailable', detail: 'not enabled (run "Focus Center: Enable Claude Hooks")' };
+  }
+  const missing = HOOK_EVENTS.filter((e) => !status.events.includes(e));
+  return {
+    source,
+    state: 'partial',
+    detail: `installed for ${status.events.length} event(s)${missing.length ? `, missing ${missing.join(', ')}` : ''}; hook events are not ingested yet`,
   };
 }

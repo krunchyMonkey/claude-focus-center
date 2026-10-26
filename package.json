@@ -55,6 +55,16 @@
         "title": "Show Diagnostics",
         "category": "Focus Center",
         "icon": "$(pulse)"
+      },
+      {
+        "command": "focusCenter.enableHooks",
+        "title": "Enable Claude Hooks…",
+        "category": "Focus Center"
+      },
+      {
+        "command": "focusCenter.disableHooks",
+        "title": "Disable Claude Hooks…",
+        "category": "Focus Center"
       }
     ],
     "menus": {
@@ -68,6 +78,16 @@
           "command": "focusCenter.showDiagnostics",
           "when": "view == focusCenter.queue",
           "group": "navigation@2"
+        },
+        {
+          "command": "focusCenter.enableHooks",
+          "when": "view == focusCenter.queue",
+          "group": "hooks@1"
+        },
+        {
+          "command": "focusCenter.disableHooks",
+          "when": "view == focusCenter.queue",
+          "group": "hooks@2"
         }
       ]
     },
@@ -82,6 +102,12 @@
           "default": [],
           "scope": "application",
           "markdownDescription": "Project folders whose Claude Code sessions are never read. A path also excludes its subfolders; `~` expands to your home folder. Matching errs towards exclusion."
+        },
+        "focusCenter.hooks.nodePath": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "markdownDescription": "Absolute path to the Node.js executable that Claude Code should use to run Focus Center hooks. Leave empty to use the first `node` on `PATH`. Only used when you run **Focus Center: Enable Claude Hooks**."
         }
       }
     }

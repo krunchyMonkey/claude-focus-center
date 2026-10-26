@@ -68,6 +68,16 @@ npm test                 # both
 - Session root: `~/.claude/projects` (or `$CLAUDE_CONFIG_DIR/projects`). Only the 200 most recently modified `<project>/<session>.jsonl` files are considered, and only their first 64 KB is parsed to find the working directory and git branch. No message content is kept. Transcripts are never modified.
 - `focusCenter.excludedPaths` (user setting): project folders that are skipped **before** any of their transcripts is opened. A path also excludes subfolders and `~` expands to your home folder. Because Claude's folder naming is lossy, matching errs towards excluding more.
 
+### Optional Claude Code hooks
+
+Hooks are **off by default**. **Focus Center: Enable Claude Hooks…** (Command Palette or the view's `…` menu) shows exactly what will change and asks for confirmation. Then it:
+
+- copies the hook script to Focus Center's global storage (a stable path that does not change with extension updates);
+- backs up `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR/settings.json`) into Focus Center's storage under `backups/`;
+- adds one `async` exec-form command hook (`node <script> <Event>`, no shell) for SessionStart, UserPromptSubmit, Notification, PermissionRequest, PostToolUseFailure, TaskCreated, TaskCompleted, Stop, StopFailure and SessionEnd. Async hooks cannot block Claude or approve or deny anything.
+
+Existing settings and other hooks are kept. If the settings file is not valid JSON, or changes while it is being updated, nothing is written. **Focus Center: Disable Claude Hooks…** removes only entries whose arguments reference `claude-focus-center-hook.js`. Node.js must be on `PATH`, or set `focusCenter.hooks.nodePath`. In this build the hook script only exits; event recording arrives with the event spool.
+
 ## Documents
 
 | Document | Purpose |

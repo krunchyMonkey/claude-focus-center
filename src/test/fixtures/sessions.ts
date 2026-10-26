@@ -76,3 +76,9 @@ function syntheticPath(...parts: string[]): string {
     ? path.win32.join('C:\\', 'synthetic', ...parts)
     : path.posix.join('/', 'synthetic', ...parts);
 }
+
+/** Synthetic user-level Claude settings with a third-party hook. */
+export const SYNTHETIC_SETTINGS = JSON.stringify({
+  model: 'synthetic-model',
+  hooks: { Stop: [{ hooks: [{ type: 'command', command: '/synthetic/other-tool/notify.sh' }] }] },
+}, null, 2) + '\n';

@@ -1,9 +1,11 @@
 // Runs inside the Extension Development Host with CLAUDE_CONFIG_DIR pointing at ten synthetic
 // sessions (see runHostTests.ts). A tiny sequential harness keeps test dependencies minimal.
 import assert from 'node:assert/strict';
+import { promises as fs } from 'node:fs';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { FocusCenterApi } from '../../extension';
-import { SYNTHETIC_REPOS } from '../fixtures/sessions';
+import { SYNTHETIC_REPOS, SYNTHETIC_SETTINGS } from '../fixtures/sessions';
 
 const EXTENSION_ID = 'krunchymonkey.claude-focus-center';
 
@@ -11,9 +13,17 @@ const tests: Array<[string, () => Promise<void>]> = [
   ['contributed commands are registered', async () => {
     await activate();
     const commands = await vscode.commands.getCommands(true);
-    for (const id of ['focusCenter.refresh', 'focusCenter.showDiagnostics']) {
+    for (const id of ['focusCenter.refresh', 'focusCenter.showDiagnostics', 'focusCenter.enableHooks', 'focusCenter.disableHooks']) {
       assert.ok(commands.includes(id), `missing command ${id}`);
     }
+  }],
+  ['activation never modifies Claude settings; Diagnostics shows hooks not enabled', async () => {
+    await activate();
+    await vscode.commands.executeCommand('focusCenter.refresh');
+    const settingsPath = path.join(process.env.CLAUDE_CONFIG_DIR ?? '', 'settings.json');
+    assert.equal(await fs.readFile(settingsPath, 'utf8'), SYNTHETIC_SETTINGS);
+    const text = (await vscode.commands.executeCommand<string[]>('focusCenter.showDiagnostics')).join('\n');
+    assert.match(text, /Claude hooks: unavailable — not enabled/);
   }],
   ['Focus Center view can be revealed', async () => {
     await activate();

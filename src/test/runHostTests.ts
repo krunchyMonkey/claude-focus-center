@@ -4,7 +4,7 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { runTests } from '@vscode/test-electron';
-import { makeTempRoot, tenSessions, writeSessions } from './fixtures/sessions';
+import { makeTempRoot, SYNTHETIC_SETTINGS, tenSessions, writeSessions } from './fixtures/sessions';
 
 async function main(): Promise<void> {
   const extensionDevelopmentPath = path.resolve(__dirname, '../..');
@@ -16,6 +16,8 @@ async function main(): Promise<void> {
   // The extension honours CLAUDE_CONFIG_DIR, so the host only ever sees synthetic sessions.
   const claudeConfigDir = await makeTempRoot('focus-center-host-');
   await writeSessions(path.join(claudeConfigDir, 'projects'), tenSessions());
+  // Pre-existing third-party settings: activation must never modify them.
+  await fs.writeFile(path.join(claudeConfigDir, 'settings.json'), SYNTHETIC_SETTINGS);
   try {
     await runTests({
       extensionDevelopmentPath,

@@ -4,7 +4,10 @@ import * as vscode from 'vscode';
 import { discoverSessions, DiscoveryResult } from './adapters/claudeSessions/discovery';
 import { defaultProjectsRoot } from './adapters/claudeSessions/paths';
 import { PollStats, TranscriptTailer } from './adapters/claudeSessions/tailer';
-import { buildDiagnosticsReport, CoverageEntry, discoveryCoverage, discoverySection, ingestionSection } from './diagnostics/report';
+import { defaultSettingsPath, hookStatus } from './adapters/claudeHooks/installer';
+import { hookCoverage } from './diagnostics/report';
+import { registerHookCommands } from './ui/hookCommands';
+import { buildDiagnosticsReport, discoveryCoverage, discoverySection, ingestionSection } from './diagnostics/report';
 import { FocusTreeProvider } from './ui/focusTreeProvider';
 import { buildSessionNodes, FocusNode } from './ui/nodes';
 
@@ -60,7 +63,8 @@ export function activate(context: vscode.ExtensionContext): FocusCenterApi {
     output,
     view,
     vscode.commands.registerCommand('focusCenter.refresh', refresh),
-    vscode.commands.registerCommand('focusCenter.showDiagnostics', () => {
+    vscode.commands.registerCommand('focusCenter.showDiagnostics', async () => {
+      const hooks = await hookStatus(defaultSettingsPath());
       const lines = buildDiagnosticsReport({
         extensionVersion: String(context.extension.packageJSON.version ?? 'unknown'),
         vscodeVersion: vscode.version,
@@ -68,13 +72,14 @@ export function activate(context: vscode.ExtensionContext): FocusCenterApi {
         nodeVersion: process.version,
         storagePath: context.globalStorageUri.fsPath,
         generatedAt: new Date(),
-        coverage: currentCoverage(lastDiscovery),
+        coverage: [discoveryCoverage(lastDiscovery), hookCoverage(hooks)],
         sections: [discoverySection(lastDiscovery), ingestionSection(ingestion.totalEvents, ingestion.lastPoll)],
       });
       output.replace(lines.join('\n') + '\n');
       output.show(true);
       return lines;
     }),
+    ...registerHookCommands(context, () => void refresh()),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('focusCenter.excludedPaths')) {
         void refresh();
@@ -106,11 +111,4 @@ function viewMessage(result: DiscoveryResult): string | undefined {
   }
   const unreadable = result.issues.filter((i) => i.code.endsWith('-unreadable')).length;
   return unreadable > 0 ? `Partial coverage: ${unreadable} unreadable path(s) — run Show Diagnostics.` : undefined;
-}
-
-function currentCoverage(discovery: DiscoveryResult | undefined): CoverageEntry[] {
-  return [
-    discoveryCoverage(discovery),
-    { source: 'Claude hooks', state: 'not-implemented', detail: 'optional hooks are not built yet' },
-  ];
 }

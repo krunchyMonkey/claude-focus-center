@@ -6,10 +6,10 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 
 - Date: 2026-10-26
 - Current milestone: **M0 — Foundation**
-- Last verified issue: **03-incremental-reader** (GitHub #3)
-- Next ready issue: **04-hook-config** (also dependency-ready: 06-state-model)
+- Last verified issue: **04-hook-config** (GitHub #4)
+- Next ready issue: **05-event-ingestion** (also dependency-ready: 06-state-model)
 - Current branch / commit: **`feat/mvp`** (local only; not pushed, no draft PR — awaiting owner approval)
-- Last executed verification: `npm run typecheck` + `npm test` (56/56 unit, 7/7 extension-host on VS Code 1.100.0)
+- Last executed verification: `npm run typecheck` + `npm test` (75/75 unit, 8/8 extension-host on VS Code 1.100.0)
 - Known blockers: none for M0. See "Environment notes" for platform differences and doc gaps.
 
 ## Environment notes (probed 2026-10-26)
@@ -29,7 +29,7 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 | 01-extension-scaffold | Verified | typecheck; 4/4 unit; 5/5 host tests (VS Code 1.100.0) | `feat/mvp` (local) |
 | 02-session-discovery | Verified | 25/25 unit; 6/6 host tests with 10 synthetic sessions / 4 repos | `feat/mvp` (local) |
 | 03-incremental-reader | Verified | 56/56 unit; 7/7 host (second Refresh reads 0 bytes) | `feat/mvp` (local) |
-| 04-hook-config | Not started | — | — |
+| 04-hook-config | Verified | 75/75 unit (byte-identical install/uninstall); 8/8 host | `feat/mvp` (local) |
 | 05-event-ingestion | Not started | — | — |
 | 06-state-model | Not started | — | — |
 | 07-attention-rules | Not started | — | — |
@@ -83,6 +83,20 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 - What is still unverified: real Claude Code transcript shapes (assumed: `type` user/assistant/system/summary, `message.content` string or blocks with text/tool_use/tool_result); cursors and seen ids are in memory only, so a VS Code restart re-reads (still no duplicates within a run; cross-restart dedupe needs issue 06); the seen-id set grows unbounded within a session.
 - Next ready issue: 04-hook-config (touches `~/.claude/settings.json` only through explicit user opt-in; tests will use temp settings files).
 - Decision or permission needed: none yet.
+
+### 2026-10-26 — Issue 04 / Safe optional hooks
+- Status: Verified (automated, temp settings files only — the real `~/.claude/settings.json` was not touched).
+- Branch / commit / draft PR: `feat/mvp`, commit "feat(04): opt-in, reversible Claude Code hook configuration…"; not pushed.
+- Hook facts checked against https://code.claude.com/docs/en/hooks on 2026-10-26: event names; exec form (`command` + `args`, no shell; on Windows `command` must be a real .exe); `async: true` hooks cannot block or decide; `PermissionRequest`/`TaskCompleted` exit 2 would block only if synchronous; settings edits are picked up by Claude's file watcher. Installed Claude CLI version could not be probed (`claude` not on PATH), so no version gate is applied yet.
+- Changed: `src/adapters/claudeHooks/settings.ts` (pure install/remove; ownership = handler args/command reference `claude-focus-center-hook.js`; refuses unexpected shapes; idempotent), `src/adapters/claudeHooks/installer.ts` (settings path honours `CLAUDE_CONFIG_DIR`; backup to global storage before every write; temp file + rename; aborts if the file changed after reading; refuses invalid JSON; keeps indentation/EOL/BOM/trailing newline; node lookup scans absolute PATH entries without executing), `src/hook/claude-focus-center-hook.ts` (placeholder: drains stdin, exit 0, no output, 2 s safety exit), `src/ui/hookCommands.ts` (Enable/Disable commands with modal confirmation listing file, events, command and backup location), `focusCenter.hooks.nodePath` setting, hook coverage in Diagnostics, README section.
+- Checks actually run (command + result):
+  - `npm run typecheck` → no errors.
+  - `npm run test:unit` → 75 pass, 0 fail. Includes: enable then disable restores a 4-space-indented third-party settings file **byte-identically**, with backups of each prior version and no temp files left; idempotent enable (no rewrite, no extra backup); missing file created then reduced to `{}`; invalid JSON (with a comment) never modified; CRLF/BOM preserved; shared matcher group keeps third-party handler; ownership needs the exact script name; compiled hook script exits 0 with empty stdout.
+  - `npm run test:host` → 8/8, including: activation + Refresh leave a pre-existing synthetic settings.json unchanged; Diagnostics reports hooks "not enabled".
+- Known limitation (tested): a pre-existing *empty* `"hooks": {}` or `"Stop": []` is not restored after install+uninstall (same meaning to Claude). Unusual JSON formatting (e.g. inline arrays) is normalised on write.
+- Not verified: the modal Enable/Disable flows by hand; a real Claude Code session executing the hook on Windows (Git Bash vs exec form); the `claude` CLI version gate.
+- Next ready issue: 05-event-ingestion.
+- Decision or permission needed: none — enabling hooks on this machine remains the owner's explicit action.
 
 ## Checkpoint template (copy for each completed issue)
 
