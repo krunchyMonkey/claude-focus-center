@@ -1,0 +1,90 @@
+{
+  "name": "claude-focus-center",
+  "displayName": "Claude Focus Center",
+  "description": "Local-first attention queue across Claude Code sessions.",
+  "version": "0.0.1",
+  "publisher": "krunchymonkey",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/krunchyMonkey/claude-focus-center.git"
+  },
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "focusCenter",
+          "title": "Focus Center",
+          "icon": "media/focus-center.svg"
+        }
+      ]
+    },
+    "views": {
+      "focusCenter": [
+        {
+          "id": "focusCenter.queue",
+          "name": "Attention Queue",
+          "contextualTitle": "Focus Center"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "focusCenter.queue",
+        "contents": "Nothing needs your attention yet.\nSession discovery is not implemented in this build, so the queue is always empty.\n[Refresh](command:focusCenter.refresh)\n[Show Diagnostics](command:focusCenter.showDiagnostics)"
+      }
+    ],
+    "commands": [
+      {
+        "command": "focusCenter.refresh",
+        "title": "Refresh",
+        "category": "Focus Center",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "focusCenter.showDiagnostics",
+        "title": "Show Diagnostics",
+        "category": "Focus Center",
+        "icon": "$(pulse)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "focusCenter.refresh",
+          "when": "view == focusCenter.queue",
+          "group": "navigation@1"
+        },
+        {
+          "command": "focusCenter.showDiagnostics",
+          "when": "view == focusCenter.queue",
+          "group": "navigation@2"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -p . --watch",
+    "typecheck": "tsc -p . --noEmit",
+    "test:unit": "npm run compile && node --test \"out/test/unit/**/*.test.js\"",
+    "test:host": "npm run compile && node ./out/test/runHostTests.js",
+    "test": "npm run test:unit && npm run test:host",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "@types/vscode": "1.100.0",
+    "@vscode/test-electron": "3.1.0",
+    "typescript": "7.0.2"
+  }
+}

@@ -4,7 +4,7 @@
 
 A planned local-first VS Code extension that turns activity across multiple Claude Code sessions, repositories, and worktrees into a concise attention queue.
 
-> **Project status (2026-10-26):** implementation-ready specification and Claude Code handoff in the public [GitHub repository](https://github.com/krunchyMonkey/claude-focus-center). The extension itself has not been implemented yet.
+> **Project status (2026-10-26):** implementation-ready specification and Claude Code handoff in the public [GitHub repository](https://github.com/krunchyMonkey/claude-focus-center). Implementation is in progress on the `feat/mvp` branch; the first slice (an empty native Focus Center view with Refresh and Diagnostics) builds and passes its tests. See [planning/PROGRESS.md](planning/PROGRESS.md).
 
 ## The problem
 
@@ -45,6 +45,23 @@ Claude Code can operate across many concurrent conversations. As work moves betw
 - Slack, Linear, Azure DevOps, Jira, or GitHub API integrations
 - Auto-approving permissions, auto-closing issues, or acting on Claude's behalf
 - Multi-user collaboration and analytics dashboards
+
+## Build and test
+
+Requirements: Node.js 20+ and npm; VS Code 1.100 or later. No API key, model or network service is needed at runtime.
+
+```bash
+npm install              # dev dependencies only (TypeScript, VS Code test runner)
+npm run compile          # TypeScript -> out/
+npm run typecheck        # tsc --noEmit
+npm run test:unit        # pure-logic tests with node:test
+npm run test:host        # Extension Development Host tests
+npm test                 # both
+```
+
+`npm run test:host` downloads VS Code 1.100.0 (the supported minimum) into `.vscode-test/` on first run. To use an installed VS Code instead, set `FOCUS_CENTER_VSCODE_EXE` to its executable path (VS Code must not be mid-update). The runner clears `ELECTRON_RUN_AS_NODE` so it also works from a VS Code integrated terminal.
+
+**Try it:** open this folder in VS Code and press <kbd>F5</kbd> ("Run Extension"). In the Extension Development Host, open the **Focus Center** activity-bar icon: the Attention Queue is empty and offers **Refresh** and **Show Diagnostics** (also available from the Command Palette under "Focus Center"). Diagnostics writes a local health report to the *Focus Center* output channel and never claims full coverage while sources are missing.
 
 ## Documents
 
