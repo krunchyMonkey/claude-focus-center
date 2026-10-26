@@ -5,6 +5,7 @@
 // Keep this folder dependency-free: it runs outside VS Code with whatever node is installed.
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { DEFAULT_SCOPE, inScope, MonitoringScope, parseScope, SCOPE_FILE } from './scope';
 import { toSpoolRecord } from './spoolRecord';
 
 const MAX_INPUT_BYTES = 1024 * 1024;
@@ -39,7 +40,8 @@ function main(): void {
 function write(spoolDir: string, raw: string, eventArg: string | undefined): void {
   try {
     const record = toSpoolRecord(raw, eventArg, new Date());
-    if (!record) {
+    // Excluded / not-included projects and paused monitoring are never written, not even minimally.
+    if (!record || !inScope(record.cwd, readScope())) {
       return;
     }
     fs.mkdirSync(spoolDir, { recursive: true });
@@ -54,6 +56,15 @@ function write(spoolDir: string, raw: string, eventArg: string | undefined): voi
     fs.renameSync(tmp, path.join(spoolDir, name));
   } catch {
     // Unavailable storage must never affect Claude.
+  }
+}
+
+/** Scope written by the extension next to this script; missing or broken means the default. */
+function readScope(): MonitoringScope {
+  try {
+    return parseScope(fs.readFileSync(path.join(__dirname, SCOPE_FILE), 'utf8'));
+  } catch {
+    return DEFAULT_SCOPE;
   }
 }
 

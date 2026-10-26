@@ -15,6 +15,7 @@ import {
   HookIngestion,
   hookSection,
   ingestionSection,
+  scopeSection,
   stateSection,
 } from './diagnostics/report';
 import type { NormalizedEvent } from './domain/events/types';
@@ -27,6 +28,11 @@ import { StateService } from './storage/stateService';
 import { FocusTreeProvider } from './ui/focusTreeProvider';
 import { registerHookCommands } from './ui/hookCommands';
 import { DETAILS_SCHEME, DetailsProvider, registerSessionCommands } from './ui/sessionCommands';
+import { promises as fs } from 'node:fs';
+import { installedScriptPath } from './adapters/claudeHooks/installer';
+import { purgeOutOfScope } from './domain/privacy/purge';
+import { inScope, MonitoringScope, SCOPE_FILE } from './hook/scope';
+import { registerPrivacyCommands } from './ui/privacyCommands';
 import { registerRecapCommands } from './ui/recapCommands';
 import { registerTriageCommands } from './ui/triageCommands';
 import { registerWorkstreamCommands } from './ui/workstreamCommands';
@@ -50,6 +56,7 @@ export interface FocusCenterApi {
   spoolDir: string;
   /** Scans the hook spool now; resolves when done. */
   scanHookSpool(): Promise<void>;
+  refresh(): Promise<void>;
 }
 
 let activeState: StateService | undefined;
@@ -74,7 +81,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
   const repoRoots = new RepoRootCache();
   const ingestion: { totalEvents: number; lastPoll?: PollStats } = { totalEvents: 0 };
   const spoolDir = spoolDirFor(storageDir);
-  const hookIngestion: HookIngestion = { totalEvents: 0, byKind: {} };
+  const hookIngestion: HookIngestion = { totalEvents: 0, byKind: {}, outOfScope: 0 };
   let hookRefreshTimer: NodeJS.Timeout | undefined;
   let snoozeTimer: NodeJS.Timeout | undefined;
 
@@ -86,7 +93,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
     const count = needsYouCount(stateService.state, now);
     view.badge = count > 0 ? { value: count, tooltip: `${count} item${count === 1 ? '' : 's'} need${count === 1 ? 's' : ''} you` } : undefined;
     view.description = count > 0 ? `${count} need${count === 1 ? 's' : ''} you` : undefined;
-    view.message = lastDiscovery ? viewMessage(lastDiscovery) : undefined;
+    view.message = currentScope().paused
+      ? 'Monitoring is paused. Run "Focus Center: Resume Monitoring" to continue.'
+      : lastDiscovery ? viewMessage(lastDiscovery) : undefined;
     // Re-render exactly when the next snooze ends, so the item returns without a refresh.
     clearTimeout(snoozeTimer);
     const expiry = nextSnoozeExpiry(stateService.state, now);
@@ -112,7 +121,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
     new SpoolConsumer(spoolDir),
     (events, stats) => {
       hookIngestion.lastScan = stats;
-      const applied = ingest(events);
+      // Defense in depth: the hook already skips out-of-scope projects, but the spool is untrusted.
+      const scope = currentScope();
+      const allowed = events.filter((e) => inScope(e.cwd ?? stateService.state.sessions[e.sessionId]?.cwd, scope));
+      hookIngestion.outOfScope += events.length - allowed.length;
+      const applied = ingest(allowed);
       if (applied.length > 0) {
         render();
       }
@@ -133,8 +146,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
   );
 
   const discover = async (): Promise<void> => {
+    const scope = currentScope();
+    if (scope.paused) {
+      render();
+      return; // Nothing is read while paused.
+    }
     try {
-      const discovery = await discoverSessions({ root: defaultProjectsRoot(), excludedPaths: excludedPaths() });
+      const discovery = await discoverSessions({ root: defaultProjectsRoot(), excludedPaths: scope.excludedPaths, includedPaths: scope.includedPaths });
       lastDiscovery = discovery;
       const roots = new Map<string, string | undefined>();
       for (const s of discovery.sessions) {
@@ -155,6 +173,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
           }
         }
         state.cursors = tailer.exportCursors(new Set(discovery.sessions.map((s) => s.transcriptPath)));
+        // Forget anything stored earlier for projects that are now out of scope.
+        purgeOutOfScope(state, scope);
         regroup(state);
       });
       render();
@@ -200,6 +220,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
           discoverySection(lastDiscovery),
           ingestionSection(ingestion.totalEvents, ingestion.lastPoll),
           hookSection(spoolDir, spool.watching, hookIngestion, new Date()),
+          scopeSection(currentScope(), stateService.state),
         ],
       });
       output.replace(lines.join('\n') + '\n');
@@ -217,13 +238,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
     // Transcripts are also re-read periodically, so sessions without hooks still update.
     disposableInterval(() => void refresh(), 60_000),
     { dispose: () => clearTimeout(hookRefreshTimer) },
-    vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration('focusCenter.excludedPaths')) {
+    ...registerPrivacyCommands(stateService, {
+      storageDir,
+      hooksInstalled: async () => (await hookStatus(defaultSettingsPath())).events.length > 0,
+      afterDelete: () => {
+        tailer.reset();
+        render();
+      },
+    }),
+    vscode.workspace.onDidChangeConfiguration(async (e) => {
+      if (['excludedPaths', 'includedPaths', 'paused'].some((k) => e.affectsConfiguration(`focusCenter.${k}`))) {
+        await writeScopeFile();
+        void vscode.commands.executeCommand('setContext', 'focusCenter.paused', currentScope().paused);
         void refresh();
       }
     }),
   );
 
+  await writeScopeFile();
+  void vscode.commands.executeCommand('setContext', 'focusCenter.paused', currentScope().paused);
   render();
   void refresh();
   void spool.start().catch((err) => output.appendLine(`Hook spool unavailable: ${err instanceof Error ? err.message : String(err)}`));
@@ -238,7 +271,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
     statePath: store.path,
     spoolDir,
     scanHookSpool: () => spool.scanNow(),
+    refresh,
   };
+
+  /** Shares the scope with the hook script, which reads it before writing any event. */
+  async function writeScopeFile(): Promise<void> {
+    const file = path.join(path.dirname(installedScriptPath(storageDir)), SCOPE_FILE);
+    try {
+      await fs.mkdir(path.dirname(file), { recursive: true });
+      const tmp = `${file}.${process.pid}.tmp`;
+      await fs.writeFile(tmp, JSON.stringify(currentScope()));
+      await fs.rename(tmp, file);
+    } catch (err) {
+      output.appendLine(`Could not write the monitoring scope for hooks: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 }
 
 export async function deactivate(): Promise<void> {
@@ -252,8 +299,13 @@ function disposableInterval(fn: () => void, ms: number): vscode.Disposable {
   return { dispose: () => clearInterval(handle) };
 }
 
-function excludedPaths(): string[] {
-  const configured = vscode.workspace.getConfiguration('focusCenter').get<unknown>('excludedPaths');
+function currentScope(): MonitoringScope {
+  const config = vscode.workspace.getConfiguration('focusCenter');
+  return { excludedPaths: pathList('excludedPaths'), includedPaths: pathList('includedPaths'), paused: config.get<unknown>('paused') === true };
+}
+
+function pathList(key: 'excludedPaths' | 'includedPaths'): string[] {
+  const configured = vscode.workspace.getConfiguration('focusCenter').get<unknown>(key);
   if (!Array.isArray(configured)) {
     return [];
   }

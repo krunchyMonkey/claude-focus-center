@@ -5,6 +5,7 @@ import { HOOK_EVENTS } from '../adapters/claudeHooks/settings';
 import type { SpoolScanStats } from '../adapters/claudeHooks/spool';
 import type { PollStats } from '../adapters/claudeSessions/tailer';
 import type { FocusState } from '../domain/state/types';
+import type { MonitoringScope } from '../hook/scope';
 import type { LoadResult } from '../storage/jsonStore';
 import { formatAge } from '../ui/nodes';
 
@@ -123,6 +124,8 @@ export function ingestionSection(totalEvents: number, last: PollStats | undefine
 
 export interface HookIngestion {
   totalEvents: number;
+  /** Events dropped because their project is out of scope. */
+  outOfScope: number;
   byKind: Record<string, number>;
   lastEventAt?: string;
   lastScan?: SpoolScanStats;
@@ -153,7 +156,7 @@ export function hookSection(spoolDir: string, watching: boolean, ingestion: Hook
     title: 'Hook events',
     lines: [
       `Spool: ${spoolDir} (${scan ? (scan.dirFound ? 'found' : 'not created yet') : 'not scanned yet'}; ${watching ? 'file watcher + 2.5 s rescan' : 'rescan every 2.5 s'})`,
-      `Received this run: ${ingestion.totalEvents}${kinds ? ` (${kinds})` : ''}`,
+      `Received this run: ${ingestion.totalEvents}${kinds ? ` (${kinds})` : ''}${ingestion.outOfScope ? `; ${ingestion.outOfScope} dropped as out of scope` : ''}`,
       `Last hook event: ${ingestion.lastEventAt ? `${ingestion.lastEventAt} (${formatAge(new Date(ingestion.lastEventAt), now)})` : 'none'}`,
       ...(scan && (scan.invalid || scan.unknownEvents || scan.duplicatesDropped)
         ? [`Last scan skipped: ${scan.invalid} invalid, ${scan.unknownEvents} unknown event, ${scan.duplicatesDropped} duplicate`]
@@ -189,4 +192,23 @@ function itemCounts(state: FocusState): string {
   }
   const order = ['needs-you', 'in-progress', 'waiting', 'uncertain', 'resolved'];
   return order.map((s) => `${s} ${counts[s] ?? 0}`).join(', ');
+}
+
+/** What is monitored: scope settings and the projects Focus Center currently holds data for. */
+export function scopeSection(scope: MonitoringScope, state: FocusState): DiagnosticsSection {
+  const projects = new Map<string, number>();
+  for (const s of Object.values(state.sessions)) {
+    const key = s.repoRoot ?? s.cwd ?? '(unknown project)';
+    projects.set(key, (projects.get(key) ?? 0) + 1);
+  }
+  return {
+    title: 'Monitoring scope',
+    lines: [
+      `Monitoring: ${scope.paused ? 'PAUSED (nothing is read or recorded)' : 'on'}`,
+      `Excluded paths: ${scope.excludedPaths.length ? scope.excludedPaths.join('; ') : 'none'}`,
+      `Allow-list: ${scope.includedPaths.length ? scope.includedPaths.join('; ') : 'none (all projects)'}`,
+      `Projects with stored data: ${projects.size}`,
+      ...[...projects].sort(([a], [b]) => a.localeCompare(b)).map(([p, n]) => `- ${p} (${n} session${n === 1 ? '' : 's'})`),
+    ],
+  };
 }

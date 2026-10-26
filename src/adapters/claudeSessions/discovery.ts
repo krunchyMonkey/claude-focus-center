@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
-import { isPathExcluded, isProjectDirExcluded } from './paths';
+import { inScope } from '../../hook/scope';
+import { isProjectDirExcluded, isProjectDirPossiblyIncluded } from './paths';
 
 /** Metadata for one local Claude Code session. Holds no message content. */
 export interface DiscoveredSession {
@@ -44,6 +45,8 @@ export interface DiscoveryResult {
 export interface DiscoveryOptions {
   root: string;
   excludedPaths?: readonly string[];
+  /** When non-empty, only sessions under these paths are read. */
+  includedPaths?: readonly string[];
   /** Most recently modified session files to inspect. */
   maxSessions?: number;
   /** Bytes read from the start of each transcript to find cwd/branch. */
@@ -72,6 +75,7 @@ interface Candidate {
  */
 export async function discoverSessions(options: DiscoveryOptions): Promise<DiscoveryResult> {
   const excluded = options.excludedPaths ?? [];
+  const included = options.includedPaths ?? [];
   const maxSessions = options.maxSessions ?? DEFAULT_MAX_SESSIONS;
   const maxHeaderBytes = options.maxHeaderBytes ?? DEFAULT_MAX_HEADER_BYTES;
   const result: DiscoveryResult = { root: options.root, rootFound: false, sessions: [], excludedCount: 0, issues: [] };
@@ -89,7 +93,7 @@ export async function discoverSessions(options: DiscoveryOptions): Promise<Disco
 
   const candidates: Candidate[] = [];
   for (const dirName of projectDirs) {
-    if (isProjectDirExcluded(dirName, excluded)) {
+    if (isProjectDirExcluded(dirName, excluded) || !isProjectDirPossiblyIncluded(dirName, included)) {
       result.excludedCount++;
       continue;
     }
@@ -139,7 +143,7 @@ export async function discoverSessions(options: DiscoveryOptions): Promise<Disco
       result.issues.push({ code: 'file-unreadable', path: c.transcriptPath, detail: errorCode(err) });
       continue;
     }
-    if (header.cwd && isPathExcluded(header.cwd, excluded, options.platform)) {
+    if (!inScope(header.cwd, { excludedPaths: [...excluded], includedPaths: [...included], paused: false }, options.platform)) {
       result.excludedCount++;
       continue;
     }

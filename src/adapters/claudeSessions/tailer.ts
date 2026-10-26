@@ -49,6 +49,12 @@ export class TranscriptTailer {
     }
   }
 
+  /** Forgets all read positions and seen ids (after Focus Center data is deleted). */
+  reset(): void {
+    this.cursors.clear();
+    this.seen.clear();
+  }
+
   get seenCount(): number {
     return this.seen.size;
   }

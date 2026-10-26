@@ -74,6 +74,14 @@ npm test                 # both
 - Session root: `~/.claude/projects` (or `$CLAUDE_CONFIG_DIR/projects`). Only the 200 most recently modified `<project>/<session>.jsonl` files are considered, and only their first 64 KB is parsed to find the working directory and git branch. No message content is kept. Transcripts are never modified.
 - `focusCenter.excludedPaths` (user setting): project folders that are skipped **before** any of their transcripts is opened. A path also excludes subfolders and `~` expands to your home folder. Because Claude's folder naming is lossy, matching errs towards excluding more.
 
+### Privacy controls
+
+- **Scope.** `focusCenter.excludedPaths` lists projects that are never read or recorded. `focusCenter.includedPaths` is an optional allow-list; when it is set, only those projects are monitored. Both apply to session discovery *and* to hooks: the hook script reads the same scope and writes nothing for out-of-scope projects, and the extension filters again. Changing either setting also deletes anything already stored for projects that fall out of scope.
+- **Pause.** **Focus Center: Pause Monitoring** stops all reading and recording, including by hooks, until you resume. Pausing does not delete data.
+- **Where data lives.** Focus Center's state, hook spool and settings backups are in VS Code's global storage for this extension. The exact path is shown in **Show Diagnostics**, which also lists the projects Focus Center holds data for. Nothing is written into your repositories or Claude's folders, except the hook entries you explicitly enable.
+- **Delete.** **Focus Center: Delete Focus Center Data…** removes the state (with its backups and recovered copies), the spool and the settings backups. It shows the exact list first. Claude Code transcripts and settings are never touched. The hook script is kept while hooks are installed, so run **Disable Claude Hooks** first to remove everything. You can delete and pause in one step.
+- **Offline.** The extension has no runtime dependencies, makes no network requests and runs no model. Tests enforce this: a static check over the shipped source, and a network trap during the extension-host suite.
+
 ### Optional Claude Code hooks
 
 Hooks are **off by default**. **Focus Center: Enable Claude Hooks…** (Command Palette or the view's `…` menu) shows exactly what will change and asks for confirmation. Then it:

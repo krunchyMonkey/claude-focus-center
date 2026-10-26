@@ -6,10 +6,10 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 
 - Date: 2026-10-26
 - Current milestone: **M0 — Foundation**
-- Last verified issue: **12-catch-me-up** (GitHub #12)
-- Next ready issue: **13-privacy-controls** (then 14-acceptance-qa)
+- Last verified issue: **13-privacy-controls** (GitHub #13)
+- Next ready issue: **14-acceptance-qa** (all dependencies 01–13 verified)
 - Current branch / commit: **`feat/mvp`** (local only; not pushed, no draft PR — awaiting owner approval)
-- Last executed verification: `npm run typecheck` + `npm test` (172/172 unit, 16/16 extension-host on VS Code 1.100.0)
+- Last executed verification: `npm run typecheck` + `npm test` (180/180 unit, 20/20 extension-host on VS Code 1.100.0)
 - Known blockers: none for M0. See "Environment notes" for platform differences and doc gaps.
 
 ## Environment notes (probed 2026-10-26)
@@ -38,7 +38,7 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 | 10-resume-details | Verified (automated) | 157/157 unit; 14/14 host: details doc opens; fake `claude.cmd` (path with a space) started in the session cwd with `--resume <id>`; unknown session / missing cwd refused | `feat/mvp` (local) |
 | 11-triage-controls | Verified (automated) | 165/165 unit (restart, expiry, supersede, reopen); 15/15 host (snooze auto-expiry, resolve persisted, fresh prompt reopens) | `feat/mvp` (local) |
 | 12-catch-me-up | Verified (automated) | 172/172 unit (no invented changes incl. after replay; restart; trimming disclosed); 16/16 host | `feat/mvp` (local) |
-| 13-privacy-controls | Not started | — | — |
+| 13-privacy-controls | Verified (automated) | 180/180 unit (scope, purge, delete, hook skips, static no-network); 20/20 host (drop + purge, pause, delete, network trap) | `feat/mvp` (local) |
 | 14-acceptance-qa | Not started | — | — |
 
 ## Checkpoints
@@ -204,6 +204,19 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 - Fixed during verification: reopening an already-open recap URI showed VS Code's cached text; each recap now has its own URI. An early `markCaughtUp` draft would have skipped changes that arrived while the recap was open.
 - Not verified: the notification button click by hand.
 - Next ready issue: 13-privacy-controls.
+- Decision or permission needed: none.
+
+### 2026-10-26 — Issue 13 / Privacy controls, diagnostics and data removal
+- Status: Verified (automated).
+- Branch / commit / draft PR: `feat/mvp`, commit "feat(13): privacy scope, pause, purge and data deletion…"; not pushed.
+- Gaps found against docs/SECURITY.md and closed: (1) hook events from excluded projects were still spooled and ingested — the extension now writes `hooks/scope.json` and the hook skips out-of-scope / paused events, with the consumer filtering again; (2) data stored before a project was excluded stayed in state — it is now purged.
+- Changed: `src/hook/scope.ts` (dependency-free `inScope`/`isUnder`/`parseScope`; exclusions win, allow-list restricts, pause stops collection; unknown cwd allowed only without an allow-list; broken scope file → default), discovery allow-list (pre-read folder check + post-read cwd check), `src/domain/privacy/purge.ts` (removes sessions, items, cursors, manual links and journal entries for out-of-scope sessions; pause never purges), `src/storage/deleteData.ts` (plan = only state files, spool, backups, plus hooks folder when hooks are not installed; refuses paths outside storage), `src/ui/privacyCommands.ts` (Pause/Resume Monitoring, Delete Focus Center Data with the exact list and an optional pause), `StateService.reset`, `TranscriptTailer.reset`, settings `focusCenter.includedPaths` and `focusCenter.paused`, `focusCenter.paused` context key, Diagnostics "Monitoring scope" (pause state, lists, projects with stored data) and out-of-scope drop counts, README "Privacy controls".
+- Checks actually run (command + result):
+  - `npm run typecheck` → no errors.
+  - `npm run test:unit` → 180 pass, 0 fail. Includes: scope semantics; allow-list discovery reads one project and skips three folders before reading; exclusion beats allow-list; purge leaves no trace of the excluded path in state; pause alone deletes nothing; delete plan and refusal of an outside path; **the installed hook (copied with `copyHookScripts`) writes nothing for an excluded cwd, outside the allow-list or while paused**, and falls back to the default on a broken scope file; static check: no `http/https/http2/net/tls/dgram/dns/child_process/worker_threads` imports, `fetch`, `XMLHttpRequest`, `WebSocket` or `require(` in shipped source, and no runtime dependencies.
+  - `npm run test:host` → 20/20. Excluding beta purges its stored session and writes `scope.json`; a hook event from beta is counted out of scope and not stored; paused refresh does no discovery and resume does; Delete removes only paths under global storage (state.json gone, state emptied, badge cleared) while synthetic Claude `settings.json` and all transcript files are byte-for-byte unchanged, and refresh rebuilds; the network trap (`http`, `https`, `net`, `tls`, `dns`, `fetch`, installed before activation) recorded no calls from extension code across all 20 tests.
+- Limits: the network trap catches calls through those module functions, not native or binding-level sockets (the static check covers imports). Pausing stops new hook records only after `scope.json` is written (immediately on the setting change).
+- Next ready issue: 14-acceptance-qa.
 - Decision or permission needed: none.
 
 ## Checkpoint template (copy for each completed issue)

@@ -24,6 +24,16 @@ export class StateService {
     this.timer = setTimeout(() => void this.flush(), this.delayMs);
   }
 
+  /** Replaces the state in place (callers hold references to it) without writing anything. */
+  reset(next: FocusState): void {
+    clearTimeout(this.timer);
+    this.dirty = false;
+    for (const key of Object.keys(this.state) as Array<keyof FocusState>) {
+      delete this.state[key];
+    }
+    Object.assign(this.state, next);
+  }
+
   /** Writes pending changes now. Saves are serialized; never throws (errors go to lastSaveError). */
   flush(): Promise<void> {
     clearTimeout(this.timer);

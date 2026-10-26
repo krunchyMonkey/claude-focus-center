@@ -10,6 +10,34 @@ import { SYNTHETIC_REPOS, SYNTHETIC_SETTINGS, tenSessions, writeSessions } from 
 
 const EXTENSION_ID = 'krunchymonkey.claude-focus-center';
 
+// Network trap, installed before the extension is activated: any network call whose stack passes
+// through the extension's compiled code (but not this test folder) is recorded.
+const networkCalls: string[] = [];
+(function trapNetwork(): void {
+  const ourOut = path.resolve(__dirname, '..', '..') + path.sep;
+  const testDir = path.resolve(__dirname, '..') + path.sep;
+  const fromExtension = (stack: string) => stack.split('\n').some((l) => l.includes(ourOut) && !l.includes(testDir));
+  const wrap = (mod: Record<string, unknown>, name: string, fn: string) => {
+    const original = mod[fn];
+    if (typeof original !== 'function') {
+      return;
+    }
+    mod[fn] = function (this: unknown, ...args: unknown[]) {
+      const stack = new Error().stack ?? '';
+      if (fromExtension(stack)) {
+        networkCalls.push(`${name}.${fn}`);
+      }
+      return (original as (...a: unknown[]) => unknown).apply(this, args);
+    };
+  };
+  for (const [name, fns] of [['http', ['request', 'get']], ['https', ['request', 'get']], ['net', ['connect', 'createConnection']], ['tls', ['connect']], ['dns', ['lookup', 'resolve']]] as const) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require(`node:${name}`) as Record<string, unknown>;
+    fns.forEach((fn) => wrap(mod, name, fn));
+  }
+  wrap(globalThis as unknown as Record<string, unknown>, 'global', 'fetch');
+})();
+
 const tests: Array<[string, () => Promise<void>]> = [
   ['contributed commands are registered', async () => {
     await activate();
@@ -269,7 +297,89 @@ const tests: Array<[string, () => Promise<void>]> = [
       await vscode.commands.executeCommand('focusCenter.refresh');
     }
   }],
+  ['out-of-scope hook events are dropped and newly excluded projects are purged from state', async () => {
+    const api = await activate();
+    const [, , , beta] = tenSessions(); // beta fix/123-header
+    assert.ok(api.getState().sessions[beta.sessionId], 'beta is stored before exclusion');
+    await setExcluded([SYNTHETIC_REPOS.beta]);
+    try {
+      await api.refresh();
+      assert.equal(api.getState().sessions[beta.sessionId], undefined, 'stored data for the excluded project is purged');
+      const storage = path.dirname(api.statePath);
+      const scope = JSON.parse(await fs.readFile(path.join(storage, 'hooks', 'scope.json'), 'utf8'));
+      assert.deepEqual(scope.excludedPaths, [SYNTHETIC_REPOS.beta], 'scope shared with the hook script');
+
+      // A hook without the scope file (the compiled copy) still writes; the extension drops it.
+      const script = path.join(__dirname, '..', '..', 'hook', 'claude-focus-center-hook.js');
+      const before = api.getHookIngestion().outOfScope;
+      const input = JSON.stringify({ hook_event_name: 'PermissionRequest', session_id: 'beta-hook-1', cwd: path.join(SYNTHETIC_REPOS.beta, 'src'), tool_name: 'Bash' });
+      assert.equal(await runNode([script, 'PermissionRequest', api.spoolDir], input), 0);
+      await api.scanHookSpool();
+      assert.equal(api.getHookIngestion().outOfScope, before + 1);
+      assert.equal(api.getState().sessions['beta-hook-1'], undefined);
+    } finally {
+      await setExcluded([]);
+      await api.refresh();
+    }
+  }],
+  ['pause reads and records nothing; resume continues', async () => {
+    const api = await activate();
+    await vscode.commands.executeCommand('focusCenter.pauseMonitoring');
+    try {
+      await waitFor(async () => JSON.parse(await fs.readFile(path.join(path.dirname(api.statePath), 'hooks', 'scope.json'), 'utf8')).paused === true);
+      const before = api.getLastDiscovery();
+      await api.refresh();
+      assert.equal(api.getLastDiscovery(), before, 'no discovery while paused');
+    } finally {
+      await vscode.commands.executeCommand('focusCenter.resumeMonitoring');
+      await waitFor(async () => JSON.parse(await fs.readFile(path.join(path.dirname(api.statePath), 'hooks', 'scope.json'), 'utf8')).paused === false);
+    }
+    const before = api.getLastDiscovery();
+    await api.refresh();
+    assert.notEqual(api.getLastDiscovery(), before);
+  }],
+  ['Delete Focus Center Data removes only its own storage; Claude files are untouched', async () => {
+    const api = await activate();
+    await api.flushState();
+    const claudeDir = String(process.env.CLAUDE_CONFIG_DIR);
+    const transcriptsBefore = await listFiles(path.join(claudeDir, 'projects'));
+    const result = await vscode.commands.executeCommand<{ removed: string[] }>('focusCenter.deleteData', { confirmed: 'delete' });
+    assert.ok(result.removed.some((p) => p.endsWith('state.json')));
+    assert.ok(result.removed.every((p) => p.startsWith(path.dirname(api.statePath))), 'only inside global storage');
+    assert.deepEqual(api.getState().sessions, {});
+    assert.equal(api.getBadge(), undefined);
+    await assert.rejects(fs.stat(api.statePath));
+    assert.equal(await fs.readFile(path.join(claudeDir, 'settings.json'), 'utf8'), SYNTHETIC_SETTINGS);
+    assert.deepEqual(await listFiles(path.join(claudeDir, 'projects')), transcriptsBefore);
+    // Monitoring continues: the view rebuilds from current sessions.
+    await api.refresh();
+    assert.ok(Object.keys(api.getState().sessions).length >= 10);
+  }],
+  ['no network calls were made by the extension during the whole run', async () => {
+    assert.deepEqual(networkCalls, []);
+  }],
 ];
+
+async function waitFor(check: () => Promise<boolean>, ms = 3000): Promise<void> {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (await check().catch(() => false)) {
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  throw new Error('condition not met in time');
+}
+
+async function listFiles(dir: string): Promise<string[]> {
+  const out: string[] = [];
+  for (const entry of await fs.readdir(dir, { withFileTypes: true, recursive: true })) {
+    if (entry.isFile()) {
+      out.push(path.join(entry.parentPath ?? (entry as unknown as { path: string }).path, entry.name));
+    }
+  }
+  return out.sort();
+}
 
 async function activate(): Promise<FocusCenterApi> {
   const ext = vscode.extensions.getExtension<FocusCenterApi>(EXTENSION_ID);

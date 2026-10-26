@@ -1,5 +1,6 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { isUnder } from '../../hook/scope';
 
 /** Default Claude Code session root, honouring Claude's own CLAUDE_CONFIG_DIR override. */
 export function defaultProjectsRoot(env: NodeJS.ProcessEnv = process.env): string {
@@ -29,28 +30,23 @@ export function isProjectDirExcluded(dirName: string, excludedPaths: readonly st
 }
 
 /** True when `cwd` equals or is inside one of the excluded paths. */
-export function isPathExcluded(
-  cwd: string,
-  excludedPaths: readonly string[],
-  platform: NodeJS.Platform = process.platform,
-): boolean {
-  const target = normalizeForCompare(cwd, platform);
-  const sep = platform === 'win32' ? '\\' : '/';
-  return excludedPaths.some((excluded) => {
-    const base = normalizeForCompare(excluded, platform);
-    return base.length > 0 && (target === base || target.startsWith(base.endsWith(sep) ? base : base + sep));
-  });
+export function isPathExcluded(cwd: string, excludedPaths: readonly string[], platform: NodeJS.Platform = process.platform): boolean {
+  return isUnder(cwd, excludedPaths, platform);
 }
 
-function normalizeForCompare(p: string, platform: NodeJS.Platform): string {
-  const impl = platform === 'win32' ? path.win32 : path.posix;
-  const trimmed = p.trim();
-  if (trimmed === '') {
-    return '';
+/**
+ * With an allow-list, true when a project folder *may* belong to an included path (so it is worth
+ * reading its header). Lossy encoding can admit extra folders; the recorded cwd is checked after.
+ */
+export function isProjectDirPossiblyIncluded(dirName: string, includedPaths: readonly string[]): boolean {
+  if (includedPaths.length === 0) {
+    return true;
   }
-  const normalized = stripTrailingSeparators(impl.normalize(platform === 'win32' ? trimmed.replace(/\//g, '\\') : trimmed));
-  // Windows and default macOS volumes are case-insensitive; folding case can only widen exclusions.
-  return platform === 'win32' || platform === 'darwin' ? normalized.toLowerCase() : normalized;
+  const dir = dirName.toLowerCase();
+  return includedPaths.some((included) => {
+    const encoded = encodeProjectDirName(stripTrailingSeparators(included)).toLowerCase();
+    return encoded.length > 0 && (dir === encoded || dir.startsWith(encoded + '-'));
+  });
 }
 
 function stripTrailingSeparators(p: string): string {
