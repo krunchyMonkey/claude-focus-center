@@ -65,17 +65,9 @@ Claude Code can operate across many concurrent conversations. As work moves betw
 
 ## GitHub issues and optional Project board
 
-This repository is already public at [`krunchyMonkey/claude-focus-center`](https://github.com/krunchyMonkey/claude-focus-center). Specifications and 16 issue bodies live in `docs/` and `planning/issues/`. The 14 MVP issues are grouped into M0, M1, and M2; issues 15-16 are post-MVP.
+This repository is already public at [`krunchyMonkey/claude-focus-center`](https://github.com/krunchyMonkey/claude-focus-center). Specifications live in `docs/` and the 16 implementation issues are tracked in [GitHub Issues](https://github.com/krunchyMonkey/claude-focus-center/issues). The 14 MVP issues are grouped into M0, M1, and M2; issues 15-16 are post-MVP.
 
-To add labels and set up the optional GitHub Projects board, run this idempotent helper from a clone of the existing repository:
-
-```bash
-gh auth login
-gh auth refresh -s project
-./scripts/bootstrap-github.sh
-```
-
-The script never creates a repository, changes visibility, force-pushes, or rewrites Git history. It can add missing labels and Project board entries to issues created through ChatGPT.
+GitHub Issues is the source of truth for the MVP backlog. A GitHub Projects board can be added later through the GitHub UI; it is not required to start implementing. No repository bootstrap is needed.
 
 ## Hand off implementation to your personal Claude Code
 
