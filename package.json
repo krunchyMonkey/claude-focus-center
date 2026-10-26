@@ -111,10 +111,27 @@
         "title": "Reopen",
         "category": "Focus Center",
         "icon": "$(debug-restart)"
+      },
+      {
+        "command": "focusCenter.catchMeUp",
+        "title": "Catch Me Up",
+        "category": "Focus Center",
+        "icon": "$(history)"
+      },
+      {
+        "command": "focusCenter.markCaughtUp",
+        "title": "Mark Caught Up",
+        "category": "Focus Center",
+        "icon": "$(check-all)"
       }
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "focusCenter.catchMeUp",
+          "when": "view == focusCenter.queue",
+          "group": "navigation@0"
+        },
         {
           "command": "focusCenter.refresh",
           "when": "view == focusCenter.queue",

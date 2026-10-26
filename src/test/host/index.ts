@@ -187,6 +187,32 @@ const tests: Array<[string, () => Promise<void>]> = [
     assert.equal(groupOf(), 'group:needs-you');
     assert.equal(api.getBadge(), 1);
   }],
+  ['Catch Me Up shows changes since the checkpoint; nothing new means an empty recap', async () => {
+    const api = await activate();
+    const first = await vscode.commands.executeCommand<{ empty: boolean; toSeq: number }>('focusCenter.catchMeUp');
+    assert.equal(first.empty, false, 'sessions and the permission item are new since tracking started');
+    const doc = vscode.window.activeTextEditor?.document;
+    assert.equal(doc?.uri.path, '/recap.md');
+    assert.match(doc?.getText() ?? '', /## Needs you now \(1\)[\s\S]*Permission needed: Bash/);
+    await vscode.commands.executeCommand('focusCenter.markCaughtUp');
+    assert.equal(api.getState().checkpointSeq, first.toSeq);
+
+    await vscode.commands.executeCommand('focusCenter.refresh'); // re-reading unchanged files adds nothing
+    const second = await vscode.commands.executeCommand<{ empty: boolean }>('focusCenter.catchMeUp');
+    assert.equal(second.empty, true);
+
+    const script = path.join(__dirname, '..', '..', 'hook', 'claude-focus-center-hook.js');
+    const input = JSON.stringify({ hook_event_name: 'StopFailure', session_id: 'host-sess-2', cwd: '/synthetic/repo', error: 'rate_limit' });
+    assert.equal(await runNode([script, 'StopFailure', api.spoolDir], input), 0);
+    await api.scanHookSpool();
+    const third = await vscode.commands.executeCommand<{ empty: boolean }>('focusCenter.catchMeUp');
+    assert.equal(third.empty, false);
+    const text = vscode.window.activeTextEditor?.document.getText() ?? '';
+    assert.match(text, /Claude stopped: rate\\_limit/);
+    assert.doesNotMatch(text, /Permission needed: Bash/, 'already-seen changes are not repeated');
+    await api.flushState();
+    assert.equal(JSON.parse(await fs.readFile(api.statePath, 'utf8')).checkpointSeq, first.toSeq, 'checkpoint persisted');
+  }],
   ['resume refuses unknown sessions and deleted working directories', async () => {
     await activate();
     const unknown = await vscode.commands.executeCommand<{ launched: boolean; reason?: string }>('focusCenter.resumeSession', 'not-a-known-session');

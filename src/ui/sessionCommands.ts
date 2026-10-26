@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
 import { planResume } from '../adapters/claudeCli/resume';
 import type { StateService } from '../storage/stateService';
+import { buildRecap } from '../domain/recap/recap';
 import { itemDetailsMarkdown, sessionDetailsMarkdown } from './details';
+import { recapMarkdown } from './recap';
 
 export const DETAILS_SCHEME = 'focus-center';
 
@@ -10,11 +12,19 @@ export class DetailsProvider implements vscode.TextDocumentContentProvider, vsco
   private readonly changed = new vscode.EventEmitter<vscode.Uri>();
   readonly onDidChange = this.changed.event;
   private readonly open = new Set<string>();
+  /** End of the journal range shown in the most recent recap render. */
+  lastRecapToSeq: number | undefined;
 
   constructor(private readonly service: StateService) {}
 
   provideTextDocumentContent(uri: vscode.Uri): string {
     this.open.add(uri.toString());
+    if (uri.path === '/recap.md') {
+      const now = new Date();
+      const recap = buildRecap(this.service.state, now);
+      this.lastRecapToSeq = recap.toSeq;
+      return recapMarkdown(recap, this.service.state, now);
+    }
     const [, kind, file] = uri.path.split('/');
     const id = decodeURIComponent((file ?? '').replace(/\.md$/, ''));
     return kind === 'session' ? sessionDetailsMarkdown(this.service.state, id, new Date()) : itemDetailsMarkdown(this.service.state, id, new Date());
@@ -121,4 +131,9 @@ function target(arg: unknown): { itemId?: string; sessionId?: string } {
     itemId: typeof a?.itemId === 'string' ? a.itemId : undefined,
     sessionId: typeof a?.sessionId === 'string' && typeof a?.itemId !== 'string' ? a.sessionId : undefined,
   };
+}
+
+/** One URI per journal range, so each Catch Me Up renders fresh instead of reusing a cached document. */
+export function recapUri(fromSeq: number, toSeq: number): vscode.Uri {
+  return vscode.Uri.from({ scheme: DETAILS_SCHEME, path: '/recap.md', query: `range=${fromSeq}-${toSeq}` });
 }

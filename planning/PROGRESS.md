@@ -6,10 +6,10 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 
 - Date: 2026-10-26
 - Current milestone: **M0 — Foundation**
-- Last verified issue: **11-triage-controls** (GitHub #11)
-- Next ready issue: **12-catch-me-up** (also ready: 13-privacy-controls)
+- Last verified issue: **12-catch-me-up** (GitHub #12)
+- Next ready issue: **13-privacy-controls** (then 14-acceptance-qa)
 - Current branch / commit: **`feat/mvp`** (local only; not pushed, no draft PR — awaiting owner approval)
-- Last executed verification: `npm run typecheck` + `npm test` (165/165 unit, 15/15 extension-host on VS Code 1.100.0)
+- Last executed verification: `npm run typecheck` + `npm test` (172/172 unit, 16/16 extension-host on VS Code 1.100.0)
 - Known blockers: none for M0. See "Environment notes" for platform differences and doc gaps.
 
 ## Environment notes (probed 2026-10-26)
@@ -37,7 +37,7 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 | 09-sidebar | Verified (automated) | 149/149 unit; 11/11 host: hook → Needs You node + badge with no refresh | `feat/mvp` (local) |
 | 10-resume-details | Verified (automated) | 157/157 unit; 14/14 host: details doc opens; fake `claude.cmd` (path with a space) started in the session cwd with `--resume <id>`; unknown session / missing cwd refused | `feat/mvp` (local) |
 | 11-triage-controls | Verified (automated) | 165/165 unit (restart, expiry, supersede, reopen); 15/15 host (snooze auto-expiry, resolve persisted, fresh prompt reopens) | `feat/mvp` (local) |
-| 12-catch-me-up | Not started | — | — |
+| 12-catch-me-up | Verified (automated) | 172/172 unit (no invented changes incl. after replay; restart; trimming disclosed); 16/16 host | `feat/mvp` (local) |
 | 13-privacy-controls | Not started | — | — |
 | 14-acceptance-qa | Not started | — | — |
 
@@ -191,6 +191,19 @@ This file is the durable handoff between Claude Code sessions. Record **verified
   - `npm run test:host` → 15/15. On the hook-created item: acknowledge keeps it in Needs You; a 2 s snooze moves it to Waiting (badge cleared), then it returns to Needs You by itself; resolve moves it to Resolved and `manuallyResolvedAt` + `acknowledgedAt` are in `state.json`; a fresh `permission_prompt` notification from a real hook process puts it back in Needs You with badge 1.
 - Not verified: an actual VS Code restart by hand (restart covered by store round trips); menu placement and look.
 - Next ready issue: 12-catch-me-up.
+- Decision or permission needed: none.
+
+### 2026-10-26 — Issue 12 / Catch Me Up
+- Status: Verified (automated).
+- Branch / commit / draft PR: `feat/mvp`, commit "feat(12): deterministic Catch Me Up recap…"; not pushed.
+- Changed: `src/domain/recap/recap.ts` (`buildRecap` from journal entries after `checkpointSeq`: one entry per item with current displayed status and up to 3 changes; groups Needs you now / Resolved / Other; new sessions; user actions counted only; `truncated` when the bounded journal dropped entries after the checkpoint; `markCaughtUp(toSeq)` moves the checkpoint only to the end of the recap the user saw and records `checkpointAt`), `src/ui/recap.ts` (Markdown, escaped), `src/ui/recapCommands.ts` (Catch Me Up opens a read-only recap document with a fresh URI per journal range plus a notification with "Mark Caught Up"; Mark Caught Up command), toolbar button, `FocusState.checkpointAt`, README.
+- Checks actually run (command + result):
+  - `npm run typecheck` → no errors.
+  - `npm run test:unit` → 172 pass, 0 fail. Includes: fresh state → "Nothing has changed"; the curated set → 7 Needs You (P0 first), resolved and new sessions; after Mark Caught Up, a full duplicate replay gives an empty recap (only the "caught up" action counted); later changes show only the newly resolved item, with triage counted not listed; changes arriving while the recap is open stay for the next one; recap and checkpoint identical after a store round trip; trimming disclosed.
+  - `npm run test:host` → 16/16. First Catch Me Up lists the hook permission under Needs you now; Mark Caught Up sets the checkpoint; Refresh (no new data) → empty recap; a new StopFailure from a real hook process → recap shows it and does not repeat the earlier permission; checkpoint persisted in `state.json`.
+- Fixed during verification: reopening an already-open recap URI showed VS Code's cached text; each recap now has its own URI. An early `markCaughtUp` draft would have skipped changes that arrived while the recap was open.
+- Not verified: the notification button click by hand.
+- Next ready issue: 13-privacy-controls.
 - Decision or permission needed: none.
 
 ## Checkpoint template (copy for each completed issue)

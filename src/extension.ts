@@ -27,6 +27,7 @@ import { StateService } from './storage/stateService';
 import { FocusTreeProvider } from './ui/focusTreeProvider';
 import { registerHookCommands } from './ui/hookCommands';
 import { DETAILS_SCHEME, DetailsProvider, registerSessionCommands } from './ui/sessionCommands';
+import { registerRecapCommands } from './ui/recapCommands';
 import { registerTriageCommands } from './ui/triageCommands';
 import { registerWorkstreamCommands } from './ui/workstreamCommands';
 import { nextSnoozeExpiry } from './domain/attention/triage';
@@ -211,6 +212,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
     vscode.workspace.registerTextDocumentContentProvider(DETAILS_SCHEME, details),
     ...registerSessionCommands(stateService),
     ...registerTriageCommands(stateService, () => render()),
+    ...registerRecapCommands(stateService, details, () => render()),
     { dispose: () => clearTimeout(snoozeTimer) },
     // Transcripts are also re-read periodically, so sessions without hooks still update.
     disposableInterval(() => void refresh(), 60_000),

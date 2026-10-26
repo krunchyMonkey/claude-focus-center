@@ -111,6 +111,8 @@ export interface FocusState {
   nextSeq: number;
   /** Catch Me Up checkpoint: journal seq the user last caught up to. */
   checkpointSeq: number;
+  /** When the user last marked themselves caught up. */
+  checkpointAt?: string;
 }
 
 export function emptyState(): FocusState {
