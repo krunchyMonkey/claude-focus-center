@@ -6,10 +6,10 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 
 - Date: 2026-10-26
 - Current milestone: **M0 — Foundation**
-- Last verified issue: **08-workstream-grouping** (GitHub #8)
-- Next ready issue: **09-sidebar** (then 10, 11, 13)
+- Last verified issue: **09-sidebar** (GitHub #9)
+- Next ready issue: **10-resume-details** (also ready: 11-triage-controls, 13-privacy-controls)
 - Current branch / commit: **`feat/mvp`** (local only; not pushed, no draft PR — awaiting owner approval)
-- Last executed verification: `npm run typecheck` + `npm test` (143/143 unit, 11/11 extension-host on VS Code 1.100.0)
+- Last executed verification: `npm run typecheck` + `npm test` (149/149 unit, 11/11 extension-host on VS Code 1.100.0)
 - Known blockers: none for M0. See "Environment notes" for platform differences and doc gaps.
 
 ## Environment notes (probed 2026-10-26)
@@ -34,7 +34,7 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 | 06-state-model | Verified | 105/105 unit (restart, replay, corruption recovery); 10/10 host (state.json written) | `feat/mvp` (local) |
 | 07-attention-rules | Verified | 20 curated scenarios; Needs You precision 100% (7/7), recall 100%; order- and replay-invariant; host: hook → Needs You item | `feat/mvp` (local) |
 | 08-workstream-grouping | Verified | 143/143 unit (same ticket merges, same-name repos separate, manual link survives re-import, conflicts kept); 11/11 host | `feat/mvp` (local) |
-| 09-sidebar | Not started | — | — |
+| 09-sidebar | Verified (automated) | 149/149 unit; 11/11 host: hook → Needs You node + badge with no refresh | `feat/mvp` (local) |
 | 10-resume-details | Not started | — | — |
 | 11-triage-controls | Not started | — | — |
 | 12-catch-me-up | Not started | — | — |
@@ -155,6 +155,18 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 - Fixed during verification: standards tokens (e.g. "UTF-8") in task subjects would have merged unrelated sessions as one Jira ticket.
 - What is still unverified: repo-root detection on real repositories and network drives; quick-pick UX by hand; uppercase tokens outside the standards denylist can still look like Jira keys when written in task subjects.
 - Next ready issue: 09-sidebar.
+- Decision or permission needed: none.
+
+### 2026-10-26 — Issue 09 / Native focus queue sidebar
+- Status: Verified by automated checks; **not yet looked at by a person** (no screenshot capability in this session).
+- Branch / commit / draft PR: `feat/mvp`, commit "feat(09): native attention queue…"; not pushed.
+- Changed: `src/ui/nodes.ts` (pure `buildAttentionNodes`: status groups in priority order — Needs You always, with "Nothing needs you right now" when empty; In Progress; Waiting; Uncertain; Resolved collapsed; then workstreams (conflict icon/notes); then items sorted by priority, acknowledgement and recency, with repo · age · direct/inferred · overrides · evidence count; Markdown tooltip with Why (latest 3 evidence), Next step and Source session(s), Markdown escaped; screen-reader labels; `contextValue` per status; collapsed "All sessions" group), `src/domain/attention/effective.ts` (snooze → Waiting, manual resolve → Resolved, rule status untouched), `src/ui/focusTreeProvider.ts` (theme-colored icons, collapsible state, Markdown tooltips, accessibility info, `getParent`), extension `render()` after every discovery and every applied hook batch; view badge and description with the Needs You count; welcome content (Refresh / Enable Hooks / Diagnostics) when there is nothing at all; item/session context menu for link/unlink.
+- Checks actually run (command + result):
+  - `npm run typecheck` → no errors.
+  - `npm run test:unit` → 149 pass, 0 fail. Tree built from all 20 curated scenarios: groups ["Needs You", "Uncertain", "Resolved"], Needs You count 7 = badge count; P0 permission first; description/tooltip/aria/context values; explicit empty Needs You; snooze → Waiting (and expiry), manual resolve → Resolved with the rule status kept; workstream conflict icon; All sessions group; Markdown escaping in titles and excerpts.
+  - `npm run test:host` → 11/11. With synthetic sessions only: roots = Needs You (explicitly empty) + All sessions (10), no badge. After a real hook process's PermissionRequest: the item is in Needs You and the badge is 1 with no manual refresh (266 ms).
+- Not verified: visual appearance, high-contrast rendering and dragging the view to the secondary side bar by hand (native TreeView, which VS Code supports; no custom rendering); screen-reader output.
+- Next ready issue: 10-resume-details.
 - Decision or permission needed: none.
 
 ## Checkpoint template (copy for each completed issue)

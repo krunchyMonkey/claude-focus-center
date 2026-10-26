@@ -34,8 +34,11 @@ const tests: Array<[string, () => Promise<void>]> = [
     const api = await activate();
     await vscode.commands.executeCommand('focusCenter.refresh');
     const roots = api.getRootNodes();
-    assert.equal(roots.length, 1);
-    const sessions = roots[0].children ?? [];
+    // Synthetic fixtures contain no asks: Needs You is explicitly empty, sessions are listed.
+    assert.deepEqual(roots.map((r) => r.id), ['group:needs-you', 'group:sessions']);
+    assert.equal(roots[0].children?.[0].label, 'Nothing needs you right now');
+    assert.equal(api.getBadge(), undefined);
+    const sessions = roots[1].children ?? [];
     assert.equal(sessions.length, 10);
     assert.equal(new Set(sessions.map((s) => s.id)).size, 10);
     assert.equal(new Set(sessions.map((s) => s.label)).size, 4);
@@ -87,6 +90,15 @@ const tests: Array<[string, () => Promise<void>]> = [
     assert.equal(items.length, 1);
     assert.deepEqual([items[0].kind, items[0].status, items[0].confidence, items[0].title], ['permission', 'needs-you', 'direct', 'Permission needed: Bash']);
     assert.equal(items[0].evidence[0].kind, 'hook');
+
+    // ...and is already in the sidebar under Needs You, with the badge, without any refresh.
+    const needs = api.getRootNodes().find((r) => r.id === 'group:needs-you');
+    const shown = needs?.children?.flatMap((ws) => ws.children ?? []).find((n) => n.itemId === items[0].id);
+    assert.equal(shown?.label, 'Permission needed: Bash');
+    assert.equal(shown?.contextValue, 'item.needs-you');
+    assert.equal(api.getBadge(), 1);
+    // The view can be revealed and the item selected via the keyboard-accessible native tree.
+    await vscode.commands.executeCommand('focusCenter.queue.focus');
     const text = (await vscode.commands.executeCommand<string[]>('focusCenter.showDiagnostics')).join('\n');
     assert.match(text, /Received this run: 1 \(permission-request 1\)/);
   }],
@@ -122,7 +134,7 @@ const tests: Array<[string, () => Promise<void>]> = [
     await setExcluded([SYNTHETIC_REPOS.beta]);
     try {
       await vscode.commands.executeCommand('focusCenter.refresh');
-      assert.equal(api.getRootNodes()[0]?.children?.length, 7);
+      assert.equal(api.getRootNodes().find((r) => r.id === 'group:sessions')?.children?.length, 7);
       assert.equal(api.getLastDiscovery()?.excludedCount, 1);
     } finally {
       await setExcluded([]);
@@ -133,7 +145,7 @@ const tests: Array<[string, () => Promise<void>]> = [
     await setExcluded(Object.values(SYNTHETIC_REPOS));
     try {
       await vscode.commands.executeCommand('focusCenter.refresh');
-      assert.deepEqual(api.getRootNodes(), []);
+      assert.equal(api.getRootNodes().find((r) => r.id === 'group:sessions'), undefined);
       const text = (await vscode.commands.executeCommand<string[]>('focusCenter.showDiagnostics')).join('\n');
       assert.match(text, /Sessions listed: 0/);
     } finally {

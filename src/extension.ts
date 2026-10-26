@@ -27,13 +27,14 @@ import { StateService } from './storage/stateService';
 import { FocusTreeProvider } from './ui/focusTreeProvider';
 import { registerHookCommands } from './ui/hookCommands';
 import { registerWorkstreamCommands } from './ui/workstreamCommands';
-import { buildSessionNodes, FocusNode } from './ui/nodes';
+import { buildAttentionNodes, FocusNode, needsYouCount } from './ui/nodes';
 
 export const VIEW_ID = 'focusCenter.queue';
 
 /** Surface returned from activate(); used by extension-host tests. */
 export interface FocusCenterApi {
   getRootNodes(): FocusNode[];
+  getBadge(): number | undefined;
   getLastDiscovery(): DiscoveryResult | undefined;
   getIngestion(): { totalEvents: number; lastPoll?: PollStats };
   getHookIngestion(): HookIngestion;
@@ -71,6 +72,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
   const hookIngestion: HookIngestion = { totalEvents: 0, byKind: {} };
   let hookRefreshTimer: NodeJS.Timeout | undefined;
 
+  /** Rebuilds the tree from current state; cheap enough to run after every change. */
+  const render = (): void => {
+    const now = new Date();
+    tree.setRoots(buildAttentionNodes(stateService.state, lastDiscovery, now));
+    const count = needsYouCount(stateService.state, now);
+    view.badge = count > 0 ? { value: count, tooltip: `${count} item${count === 1 ? '' : 's'} need${count === 1 ? 's' : ''} you` } : undefined;
+    view.description = count > 0 ? `${count} need${count === 1 ? 's' : ''} you` : undefined;
+    view.message = lastDiscovery ? viewMessage(lastDiscovery) : undefined;
+  };
+
   /** Single entry point for new events from any source: deduped against everything already applied. */
   const ingest = (events: NormalizedEvent[]): NormalizedEvent[] => {
     let applied: NormalizedEvent[] = [];
@@ -89,6 +100,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
     (events, stats) => {
       hookIngestion.lastScan = stats;
       const applied = ingest(events);
+      if (applied.length > 0) {
+        render();
+      }
       if (applied.length > 0) {
         // Hooks are a cue that transcripts changed too: re-read soon so answers resolve items.
         clearTimeout(hookRefreshTimer);
@@ -130,8 +144,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
         state.cursors = tailer.exportCursors(new Set(discovery.sessions.map((s) => s.transcriptPath)));
         regroup(state);
       });
-      tree.setRoots(buildSessionNodes(discovery, new Date()));
-      view.message = viewMessage(discovery);
+      render();
     } catch (err) {
       output.appendLine(`Session discovery failed: ${err instanceof Error ? err.message : String(err)}`);
       view.message = 'Session discovery failed — run Show Diagnostics.';
@@ -192,10 +205,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
     }),
   );
 
+  render();
   void refresh();
   void spool.start().catch((err) => output.appendLine(`Hook spool unavailable: ${err instanceof Error ? err.message : String(err)}`));
   return {
     getRootNodes: () => tree.getChildren(),
+    getBadge: () => view.badge?.value,
     getLastDiscovery: () => lastDiscovery,
     getIngestion: () => ingestion,
     getHookIngestion: () => hookIngestion,

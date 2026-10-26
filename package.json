@@ -40,7 +40,7 @@
     "viewsWelcome": [
       {
         "view": "focusCenter.queue",
-        "contents": "No Claude Code sessions found.\nFocus Center reads session metadata from your local Claude Code folder (read-only, nothing leaves this machine).\n[Refresh](command:focusCenter.refresh)\n[Show Diagnostics](command:focusCenter.showDiagnostics)"
+        "contents": "Focus Center has not found any Claude Code sessions yet.\nIt reads session metadata from your local Claude Code folder (read-only; nothing leaves this machine). Optional hooks make permission requests appear instantly.\n[Refresh](command:focusCenter.refresh)\n[Enable Claude Hooks](command:focusCenter.enableHooks)\n[Show Diagnostics](command:focusCenter.showDiagnostics)"
       }
     ],
     "commands": [
@@ -98,6 +98,18 @@
           "command": "focusCenter.disableHooks",
           "when": "view == focusCenter.queue",
           "group": "hooks@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "focusCenter.linkSession",
+          "when": "view == focusCenter.queue && viewItem =~ /^(item|session)/",
+          "group": "workstream@1"
+        },
+        {
+          "command": "focusCenter.unlinkSession",
+          "when": "view == focusCenter.queue && viewItem =~ /^(item|session)/",
+          "group": "workstream@2"
         }
       ]
     },

@@ -14,20 +14,39 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<FocusNode>, vs
 
   getTreeItem(node: FocusNode): vscode.TreeItem {
     const state = node.children?.length
-      ? vscode.TreeItemCollapsibleState.Expanded
+      ? node.collapsed ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.Expanded
       : vscode.TreeItemCollapsibleState.None;
     const item = new vscode.TreeItem(node.label, state);
     item.id = node.id;
     item.description = node.description;
-    item.tooltip = node.tooltip;
+    item.tooltip = node.tooltip && node.tooltipIsMarkdown ? new vscode.MarkdownString(node.tooltip) : node.tooltip;
+    item.contextValue = node.contextValue;
+    item.accessibilityInformation = { label: node.ariaLabel ?? [node.label, node.description].filter(Boolean).join(', ') };
     if (node.icon) {
-      item.iconPath = new vscode.ThemeIcon(node.icon);
+      item.iconPath = new vscode.ThemeIcon(node.icon, node.iconColor ? new vscode.ThemeColor(node.iconColor) : undefined);
     }
     return item;
   }
 
   getChildren(node?: FocusNode): FocusNode[] {
     return node ? (node.children ?? []) : this.roots;
+  }
+
+  /** Needed for TreeView.reveal. */
+  getParent(node: FocusNode): FocusNode | undefined {
+    const find = (nodes: FocusNode[], parent?: FocusNode): FocusNode | undefined => {
+      for (const n of nodes) {
+        if (n.id === node.id) {
+          return parent;
+        }
+        const hit = n.children ? find(n.children, n) : undefined;
+        if (hit) {
+          return hit;
+        }
+      }
+      return undefined;
+    };
+    return find(this.roots);
   }
 
   dispose(): void {
