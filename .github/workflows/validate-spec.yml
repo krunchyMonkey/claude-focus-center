@@ -1,0 +1,22 @@
+name: Validate project specification
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate planning structure
+        run: |
+          test -s CLAUDE.md
+          test -s docs/MVP-SPEC.md
+          test -s docs/ARCHITECTURE.md
+          test -s docs/SECURITY.md
+          test -s docs/AGENT-KICKOFF.md
+          test -s planning/PROGRESS.md
+          test "$(tail -n +2 planning/issue-index.tsv | wc -l | tr -d ' ')" -eq 16
+      - name: Shell syntax
+        run: bash -n scripts/start-personal-build.sh
