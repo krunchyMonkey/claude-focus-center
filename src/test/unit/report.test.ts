@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildDiagnosticsReport, CoverageEntry, discoveryCoverage, discoverySection, summarizeCoverage } from '../../diagnostics/report';
+import { buildDiagnosticsReport, CoverageEntry, discoveryCoverage, discoverySection, ingestionSection, summarizeCoverage } from '../../diagnostics/report';
 
 const base = {
   extensionVersion: '0.0.1',
@@ -59,4 +59,16 @@ test('discovery section lists issue codes and paths', () => {
   const text = buildDiagnosticsReport({ ...base, coverage: [], sections: [section] }).join('\n');
   assert.match(text, /Session discovery\n {2}Root: \/r \(found\)/);
   assert.match(text, /- no-metadata: \/r\/p\/s\.jsonl \(no cwd\)/);
+});
+
+test('ingestion section reports counts without content', () => {
+  const section = ingestionSection(5, { filesRead: 1, filesUnchanged: 2, bytesRead: 300, invalidLines: 1, oversizedLines: 0, resets: 0, duplicatesDropped: 0, deferred: 1, errors: [{ path: '/r/x.jsonl', code: 'EACCES' }] });
+  assert.deepEqual(section.lines, [
+    'Events ingested since start: 5',
+    'Last refresh: 1 file(s) read, 2 unchanged (not reread), 300 bytes',
+    'Skipped lines: 1 invalid, 0 oversized; duplicates dropped: 0; rewrites detected: 0',
+    'Deferred to next refresh (byte budget): 1 file(s)',
+    '- unreadable: /r/x.jsonl (EACCES)',
+  ]);
+  assert.deepEqual(ingestionSection(0, undefined).lines, ['not run yet']);
 });

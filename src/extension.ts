@@ -3,7 +3,8 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { discoverSessions, DiscoveryResult } from './adapters/claudeSessions/discovery';
 import { defaultProjectsRoot } from './adapters/claudeSessions/paths';
-import { buildDiagnosticsReport, CoverageEntry, discoveryCoverage, discoverySection } from './diagnostics/report';
+import { PollStats, TranscriptTailer } from './adapters/claudeSessions/tailer';
+import { buildDiagnosticsReport, CoverageEntry, discoveryCoverage, discoverySection, ingestionSection } from './diagnostics/report';
 import { FocusTreeProvider } from './ui/focusTreeProvider';
 import { buildSessionNodes, FocusNode } from './ui/nodes';
 
@@ -13,6 +14,7 @@ export const VIEW_ID = 'focusCenter.queue';
 export interface FocusCenterApi {
   getRootNodes(): FocusNode[];
   getLastDiscovery(): DiscoveryResult | undefined;
+  getIngestion(): { totalEvents: number; lastPoll?: PollStats };
 }
 
 export function activate(context: vscode.ExtensionContext): FocusCenterApi {
@@ -20,12 +22,18 @@ export function activate(context: vscode.ExtensionContext): FocusCenterApi {
   const output = vscode.window.createOutputChannel('Focus Center');
   const view = vscode.window.createTreeView(VIEW_ID, { treeDataProvider: tree, showCollapseAll: true });
   let lastDiscovery: DiscoveryResult | undefined;
+  // Cursors and seen-event ids are in memory for now; persistence arrives with the state store (issue 06).
+  const tailer = new TranscriptTailer();
+  const ingestion: { totalEvents: number; lastPoll?: PollStats } = { totalEvents: 0 };
   let running: Promise<void> | undefined;
   let queued: Promise<void> | undefined;
 
   const discover = async (): Promise<void> => {
     try {
       lastDiscovery = await discoverSessions({ root: defaultProjectsRoot(), excludedPaths: excludedPaths() });
+      const poll = await tailer.poll(lastDiscovery.sessions);
+      ingestion.totalEvents += poll.events.length;
+      ingestion.lastPoll = poll.stats;
       tree.setRoots(buildSessionNodes(lastDiscovery, new Date()));
       view.message = viewMessage(lastDiscovery);
     } catch (err) {
@@ -61,7 +69,7 @@ export function activate(context: vscode.ExtensionContext): FocusCenterApi {
         storagePath: context.globalStorageUri.fsPath,
         generatedAt: new Date(),
         coverage: currentCoverage(lastDiscovery),
-        sections: [discoverySection(lastDiscovery)],
+        sections: [discoverySection(lastDiscovery), ingestionSection(ingestion.totalEvents, ingestion.lastPoll)],
       });
       output.replace(lines.join('\n') + '\n');
       output.show(true);
@@ -75,7 +83,7 @@ export function activate(context: vscode.ExtensionContext): FocusCenterApi {
   );
 
   void refresh();
-  return { getRootNodes: () => tree.getChildren(), getLastDiscovery: () => lastDiscovery };
+  return { getRootNodes: () => tree.getChildren(), getLastDiscovery: () => lastDiscovery, getIngestion: () => ingestion };
 }
 
 export function deactivate(): void {

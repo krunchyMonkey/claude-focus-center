@@ -6,10 +6,10 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 
 - Date: 2026-10-26
 - Current milestone: **M0 — Foundation**
-- Last verified issue: **02-session-discovery** (GitHub #2)
-- Next ready issue: **03-incremental-reader** (also dependency-ready: 04-hook-config, 06-state-model, 08-workstream-grouping needs 06)
+- Last verified issue: **03-incremental-reader** (GitHub #3)
+- Next ready issue: **04-hook-config** (also dependency-ready: 06-state-model)
 - Current branch / commit: **`feat/mvp`** (local only; not pushed, no draft PR — awaiting owner approval)
-- Last executed verification: `npm run typecheck` + `npm test` (25/25 unit, 6/6 extension-host on VS Code 1.100.0)
+- Last executed verification: `npm run typecheck` + `npm test` (56/56 unit, 7/7 extension-host on VS Code 1.100.0)
 - Known blockers: none for M0. See "Environment notes" for platform differences and doc gaps.
 
 ## Environment notes (probed 2026-10-26)
@@ -28,7 +28,7 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 | --- | --- | --- | --- |
 | 01-extension-scaffold | Verified | typecheck; 4/4 unit; 5/5 host tests (VS Code 1.100.0) | `feat/mvp` (local) |
 | 02-session-discovery | Verified | 25/25 unit; 6/6 host tests with 10 synthetic sessions / 4 repos | `feat/mvp` (local) |
-| 03-incremental-reader | Not started | — | — |
+| 03-incremental-reader | Verified | 56/56 unit; 7/7 host (second Refresh reads 0 bytes) | `feat/mvp` (local) |
 | 04-hook-config | Not started | — | — |
 | 05-event-ingestion | Not started | — | — |
 | 06-state-model | Not started | — | — |
@@ -70,6 +70,19 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 - What is still unverified: behaviour on real Claude Code transcripts (format assumed from public behaviour: `<root>/<encoded cwd>/<sessionId>.jsonl`, records with `cwd`/`gitBranch`); unreadable-file path on Windows (cannot chmod); macOS/Linux.
 - Next ready issue: 03-incremental-reader.
 - Decision or permission needed: none new.
+
+### 2026-10-26 — Issue 03 / Incremental JSONL reader
+- Status: Verified (automated, synthetic fixtures only).
+- Branch / commit / draft PR: `feat/mvp`, commit "feat(03): incremental, schema-tolerant transcript reader…"; not pushed.
+- Changed: `src/adapters/claudeSessions/reader.ts` (byte-offset cursor; unchanged size+mtime+fully-read files are not opened; partial last line held back; truncation and in-place rewrite detected via size and a 256-byte prefix hash; oversized lines skipped; cold start of large files reads only the last 1 MB), `src/adapters/claudeSessions/tailer.ts` (per-file cursors, dedupe by stable event id, 16 MB soft per-poll budget with deferral, per-file errors), `src/domain/events/types.ts` (`NormalizedEvent` v1), `src/domain/events/transcript.ts` (schema-tolerant normalizer: user-prompt without text, assistant-text with 400-char redacted tail, tool-use name only, tool-result error flag + 200-char redacted excerpt, system error flag; ids = uuid or line hash), `src/domain/events/redact.ts` (credential masking before truncation), diagnostics "Transcript ingestion" section, Refresh now polls transcripts.
+- Checks actually run (command + result):
+  - `npm run typecheck` → no errors.
+  - `npm run test:unit` → 56 pass, 0 fail. Reader: unchanged skip, partial line, append, truncation, same-length rewrite, oversized line, cold-start tail, CRLF/empty, touch, missing file, budget resume, no busy re-read of partial EOF line. Tailer: replay emits nothing, restart gives identical ids, append-only emission, reordered rewrite → reset with 0 new events, duplicate UUIDs, corrupt lines, missing file, byte budget deferral. Normalizer: prompt text/tool args/tool output/thinking never retained; invalid input never throws; unsafe uuids hashed; bad timestamps dropped. Redaction: 9 credential shapes, prose untouched.
+  - `npm run test:host` → 7/7, including: first Refresh ingests 20 events from 10 sessions; second Refresh reads 0 bytes, 10 files unchanged, no new events.
+- Bug found and fixed during verification: a read stopped by the byte budget was treated as "unchanged" on the next call (now tracked with `cursor.readTo`).
+- What is still unverified: real Claude Code transcript shapes (assumed: `type` user/assistant/system/summary, `message.content` string or blocks with text/tool_use/tool_result); cursors and seen ids are in memory only, so a VS Code restart re-reads (still no duplicates within a run; cross-restart dedupe needs issue 06); the seen-id set grows unbounded within a session.
+- Next ready issue: 04-hook-config (touches `~/.claude/settings.json` only through explicit user opt-in; tests will use temp settings files).
+- Decision or permission needed: none yet.
 
 ## Checkpoint template (copy for each completed issue)
 

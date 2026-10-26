@@ -1,5 +1,6 @@
 // Pure diagnostics formatting: no VS Code or filesystem access, so it is unit-testable.
 import type { DiscoveryResult } from '../adapters/claudeSessions/discovery';
+import type { PollStats } from '../adapters/claudeSessions/tailer';
 
 export type CoverageState = 'active' | 'partial' | 'unavailable' | 'not-implemented';
 
@@ -95,4 +96,21 @@ export function discoverySection(result: DiscoveryResult | undefined): Diagnosti
     ...result.issues.map((i) => `- ${i.code}: ${i.path}${i.detail ? ` (${i.detail})` : ''}`),
   ];
   return { title: 'Session discovery', lines };
+}
+
+/** Incremental transcript reading: counts only. */
+export function ingestionSection(totalEvents: number, last: PollStats | undefined): DiagnosticsSection {
+  if (!last) {
+    return { title: 'Transcript ingestion', lines: ['not run yet'] };
+  }
+  return {
+    title: 'Transcript ingestion',
+    lines: [
+      `Events ingested since start: ${totalEvents}`,
+      `Last refresh: ${last.filesRead} file(s) read, ${last.filesUnchanged} unchanged (not reread), ${last.bytesRead} bytes`,
+      `Skipped lines: ${last.invalidLines} invalid, ${last.oversizedLines} oversized; duplicates dropped: ${last.duplicatesDropped}; rewrites detected: ${last.resets}`,
+      ...(last.deferred > 0 ? [`Deferred to next refresh (byte budget): ${last.deferred} file(s)`] : []),
+      ...last.errors.map((e) => `- unreadable: ${e.path} (${e.code})`),
+    ],
+  };
 }

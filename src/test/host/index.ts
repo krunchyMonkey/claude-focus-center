@@ -36,6 +36,20 @@ const tests: Array<[string, () => Promise<void>]> = [
     assert.match(text, /Sessions listed: 10/);
     assert.match(text, /partial coverage/);
   }],
+  ['Refresh reads transcripts incrementally: unchanged files are not reread', async () => {
+    const api = await activate();
+    await vscode.commands.executeCommand('focusCenter.refresh');
+    const before = api.getIngestion().totalEvents;
+    assert.equal(before, 20); // 10 sessions x (prompt + reply)
+    await vscode.commands.executeCommand('focusCenter.refresh');
+    const { totalEvents, lastPoll } = api.getIngestion();
+    assert.equal(totalEvents, before);
+    assert.equal(lastPoll?.filesUnchanged, 10);
+    assert.equal(lastPoll?.bytesRead, 0);
+    const text = (await vscode.commands.executeCommand<string[]>('focusCenter.showDiagnostics')).join('\n');
+    assert.match(text, /Events ingested since start: 20/);
+    assert.match(text, /0 file\(s\) read, 10 unchanged \(not reread\), 0 bytes/);
+  }],
   ['excludedPaths setting removes a repository on refresh', async () => {
     const api = await activate();
     await setExcluded([SYNTHETIC_REPOS.beta]);
