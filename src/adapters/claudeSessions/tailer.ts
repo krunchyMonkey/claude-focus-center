@@ -41,10 +41,27 @@ export class TranscriptTailer {
   private readonly cursors = new Map<string, ReadCursor>();
   private readonly seen = new Set<string>();
 
-  constructor(private readonly options: TailerOptions = {}) {}
+  constructor(private readonly options: TailerOptions = {}, initialCursors: Record<string, ReadCursor> = {}) {
+    for (const [file, cursor] of Object.entries(initialCursors)) {
+      if (isCursor(cursor)) {
+        this.cursors.set(file, cursor);
+      }
+    }
+  }
 
   get seenCount(): number {
     return this.seen.size;
+  }
+
+  /** Read positions for persistence, limited to the given transcripts (drops vanished files). */
+  exportCursors(keep?: ReadonlySet<string>): Record<string, ReadCursor> {
+    const out: Record<string, ReadCursor> = {};
+    for (const [file, cursor] of this.cursors) {
+      if (!keep || keep.has(file)) {
+        out[file] = cursor;
+      }
+    }
+    return out;
   }
 
   async poll(targets: readonly TailTarget[]): Promise<PollResult> {
@@ -102,4 +119,11 @@ export class TranscriptTailer {
     }
     return { events, stats };
   }
+}
+
+function isCursor(value: unknown): value is ReadCursor {
+  const c = value as ReadCursor;
+  return typeof c === 'object' && c !== null
+    && [c.offset, c.size, c.mtimeMs, c.readTo, c.fingerprintBytes].every((n) => typeof n === 'number' && Number.isFinite(n) && n >= 0)
+    && typeof c.fingerprint === 'string' && typeof c.discardingLine === 'boolean';
 }

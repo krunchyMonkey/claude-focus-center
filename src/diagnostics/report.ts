@@ -4,6 +4,8 @@ import type { HookStatus } from '../adapters/claudeHooks/installer';
 import { HOOK_EVENTS } from '../adapters/claudeHooks/settings';
 import type { SpoolScanStats } from '../adapters/claudeHooks/spool';
 import type { PollStats } from '../adapters/claudeSessions/tailer';
+import type { FocusState } from '../domain/state/types';
+import type { LoadResult } from '../storage/jsonStore';
 import { formatAge } from '../ui/nodes';
 
 export type CoverageState = 'active' | 'partial' | 'unavailable' | 'not-implemented';
@@ -156,6 +158,26 @@ export function hookSection(spoolDir: string, watching: boolean, ingestion: Hook
       ...(scan && (scan.invalid || scan.unknownEvents || scan.duplicatesDropped)
         ? [`Last scan skipped: ${scan.invalid} invalid, ${scan.unknownEvents} unknown event, ${scan.duplicatesDropped} duplicate`]
         : []),
+    ],
+  };
+}
+
+/** Persisted state health: where it lives, how it loaded, sizes and last save. */
+export function stateSection(
+  file: string,
+  service: { state: FocusState; loaded: LoadResult; lastSavedAt?: string; lastSaveError?: string },
+): DiagnosticsSection {
+  const { state, loaded } = service;
+  return {
+    title: 'Saved state',
+    lines: [
+      `File: ${file} (schema ${state.schemaVersion}, loaded from ${loaded.source})`,
+      ...(loaded.recovery
+        ? [`Recovered: ${loaded.recovery.problem}${loaded.recovery.movedTo ? `; original kept at ${loaded.recovery.movedTo}` : ''}`]
+        : []),
+      `Sessions: ${Object.keys(state.sessions).length}; items: ${Object.keys(state.items).length}; workstreams: ${Object.keys(state.workstreams).length}`,
+      `Events applied (dedupe window): ${state.processedEventIds.length}; journal entries: ${state.journal.length}; transcript cursors: ${Object.keys(state.cursors).length}`,
+      `Last saved: ${service.lastSavedAt ?? 'not this run'}${service.lastSaveError ? `; LAST SAVE FAILED: ${service.lastSaveError}` : ''}`,
     ],
   };
 }

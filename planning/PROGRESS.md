@@ -6,10 +6,10 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 
 - Date: 2026-10-26
 - Current milestone: **M0 — Foundation**
-- Last verified issue: **05-event-ingestion** (GitHub #5)
-- Next ready issue: **06-state-model** (then 07-attention-rules, 08-workstream-grouping)
+- Last verified issue: **06-state-model** (GitHub #6)
+- Next ready issue: **07-attention-rules** (also ready: 08-workstream-grouping)
 - Current branch / commit: **`feat/mvp`** (local only; not pushed, no draft PR — awaiting owner approval)
-- Last executed verification: `npm run typecheck` + `npm test` (90/90 unit, 9/9 extension-host on VS Code 1.100.0, run twice back-to-back)
+- Last executed verification: `npm run typecheck` + `npm test` (105/105 unit, 10/10 extension-host on VS Code 1.100.0)
 - Known blockers: none for M0. See "Environment notes" for platform differences and doc gaps.
 
 ## Environment notes (probed 2026-10-26)
@@ -31,7 +31,7 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 | 03-incremental-reader | Verified | 56/56 unit; 7/7 host (second Refresh reads 0 bytes) | `feat/mvp` (local) |
 | 04-hook-config | Verified | 75/75 unit (byte-identical install/uninstall); 8/8 host | `feat/mvp` (local) |
 | 05-event-ingestion | Verified | 90/90 unit (real hook script, 12 concurrent writers, replay); 9/9 host, hook→extension 285–303 ms | `feat/mvp` (local) |
-| 06-state-model | Not started | — | — |
+| 06-state-model | Verified | 105/105 unit (restart, replay, corruption recovery); 10/10 host (state.json written) | `feat/mvp` (local) |
 | 07-attention-rules | Not started | — | — |
 | 08-workstream-grouping | Not started | — | — |
 | 09-sidebar | Not started | — | — |
@@ -109,6 +109,19 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 - Fixed during verification: host runs shared VS Code user data, so a second run treated the first run's spool file as a replay. The runner now uses a fresh temp `--user-data-dir` per run.
 - What is still unverified: a real Claude Code session executing the hook on Windows (Git Bash) or macOS; real payload shapes beyond the documented fields; dedupe across extension restarts relies on spool files plus in-memory ids (persisted ids arrive with issue 06).
 - Next ready issue: 06-state-model.
+- Decision or permission needed: none.
+
+### 2026-10-26 — Issue 06 / Persist evidence-backed state
+- Status: Verified (automated).
+- Branch / commit / draft PR: `feat/mvp`, commit "feat(06): persisted, versioned, replay-safe state…"; not pushed.
+- Changed: `src/domain/state/types.ts` (schema v1 `FocusState`: sessions, attention items, evidence refs, workstreams, manual links, processed event ids, transcript cursors, change journal, Catch Me Up checkpoint seq — contract types from docs/ARCHITECTURE.md), `src/domain/state/reducer.ts` (deterministic, idempotent `applyEvents` with a 50 000-id dedupe window; session metadata; 2 000-entry journal), `src/storage/jsonStore.ts` (`StateStore` interface; atomic temp → `.bak` → rename; recovery: invalid/corrupt/unreadable/newer-schema files are moved aside, never deleted, then backup or empty state), `src/storage/validate.ts`, `src/storage/stateService.ts` (debounced save, serialized writes, save errors surfaced and retried), tailer cursor import/export (garbage cursors ignored). `activate` is now async: loads state before the first refresh, restores cursors, routes transcript and hook events through one `ingest` dedupe, flushes on `deactivate`. Diagnostics "Saved state" section; warning toast when recovery happened.
+- Checks actually run (command + result):
+  - `npm run typecheck` → no errors.
+  - `npm run test:unit` → 105 pass, 0 fail. Includes: replay (also reversed) applies nothing; two fresh states fed the same events are deep-equal; save → new store instance → load is deep-equal and replay is a no-op; `.bak` kept, no temp files; partial-write JSON → original moved aside + backup used; corrupt primary and backup → empty state with both originals kept; crash between renames → backup restored; newer schema moved aside; validator cases; debounced/forced saves; failed save reported then retried; persisted cursors → restarted tailer reads 0 bytes.
+  - `npm run test:host` → 10/10: after Refresh, `state.json` in global storage holds the 10 synthetic sessions with cwd, 10 cursors, ≥ 20 processed ids, no fixture prompt/reply text, and lives outside Claude's folders.
+- Bug found and fixed during verification: discovered-session records kept `undefined` fields, so in-memory and reloaded state differed.
+- What is still unverified: an actual VS Code restart by hand (restart is simulated by new store/tailer instances); `items`/`workstreams` stay empty until issues 07/08; state of sessions later added to `excludedPaths` is not purged yet (issue 13).
+- Next ready issue: 07-attention-rules.
 - Decision or permission needed: none.
 
 ## Checkpoint template (copy for each completed issue)

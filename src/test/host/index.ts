@@ -6,7 +6,7 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { FocusCenterApi } from '../../extension';
-import { SYNTHETIC_REPOS, SYNTHETIC_SETTINGS } from '../fixtures/sessions';
+import { SYNTHETIC_REPOS, SYNTHETIC_SETTINGS, tenSessions } from '../fixtures/sessions';
 
 const EXTENSION_ID = 'krunchymonkey.claude-focus-center';
 
@@ -83,6 +83,21 @@ const tests: Array<[string, () => Promise<void>]> = [
     assert.equal(api.getHookIngestion().totalEvents, before + 1);
     const text = (await vscode.commands.executeCommand<string[]>('focusCenter.showDiagnostics')).join('\n');
     assert.match(text, /Received this run: 1 \(permission-request 1\)/);
+  }],
+  ['state is persisted to global storage with sessions, cursors and no transcript content', async () => {
+    const api = await activate();
+    await vscode.commands.executeCommand('focusCenter.refresh');
+    await api.flushState();
+    const saved = JSON.parse(await fs.readFile(api.statePath, 'utf8'));
+    assert.equal(saved.schemaVersion, 1);
+    for (const s of tenSessions()) {
+      assert.equal(saved.sessions[s.sessionId]?.cwd, s.cwd);
+    }
+    assert.equal(Object.keys(saved.cursors).length, 10);
+    assert.ok(saved.processedEventIds.length >= 20);
+    // Fixture prompt/reply text must never reach persisted state.
+    assert.doesNotMatch(JSON.stringify(saved), /Synthetic request\.|Synthetic reply\./);
+    assert.ok(!api.statePath.startsWith(String(process.env.CLAUDE_CONFIG_DIR)), 'state lives outside Claude folders');
   }],
   ['excludedPaths setting removes a repository on refresh', async () => {
     const api = await activate();
