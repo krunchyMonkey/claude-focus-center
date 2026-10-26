@@ -65,6 +65,16 @@
         "command": "focusCenter.disableHooks",
         "title": "Disable Claude Hooks…",
         "category": "Focus Center"
+      },
+      {
+        "command": "focusCenter.linkSession",
+        "title": "Link Session to Workstream…",
+        "category": "Focus Center"
+      },
+      {
+        "command": "focusCenter.unlinkSession",
+        "title": "Restore Automatic Grouping…",
+        "category": "Focus Center"
       }
     ],
     "menus": {

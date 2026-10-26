@@ -20,10 +20,13 @@ import {
 import type { NormalizedEvent } from './domain/events/types';
 import { applyEvents, recordDiscoveredSession } from './domain/state/reducer';
 import type { FocusState } from './domain/state/types';
+import { RepoRootCache } from './adapters/git/repoRoot';
+import { regroup } from './domain/workstreams/group';
 import { JsonFileStore } from './storage/jsonStore';
 import { StateService } from './storage/stateService';
 import { FocusTreeProvider } from './ui/focusTreeProvider';
 import { registerHookCommands } from './ui/hookCommands';
+import { registerWorkstreamCommands } from './ui/workstreamCommands';
 import { buildSessionNodes, FocusNode } from './ui/nodes';
 
 export const VIEW_ID = 'focusCenter.queue';
@@ -62,6 +65,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
   const view = vscode.window.createTreeView(VIEW_ID, { treeDataProvider: tree, showCollapseAll: true });
   let lastDiscovery: DiscoveryResult | undefined;
   const tailer = new TranscriptTailer({}, stateService.state.cursors);
+  const repoRoots = new RepoRootCache();
   const ingestion: { totalEvents: number; lastPoll?: PollStats } = { totalEvents: 0 };
   const spoolDir = spoolDirFor(storageDir);
   const hookIngestion: HookIngestion = { totalEvents: 0, byKind: {} };
@@ -72,6 +76,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
     let applied: NormalizedEvent[] = [];
     stateService.update((state) => {
       applied = applyEvents(state, events, new Date()).applied;
+      if (applied.length > 0) {
+        regroup(state);
+      }
     });
     return applied;
   };
@@ -102,6 +109,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
     try {
       const discovery = await discoverSessions({ root: defaultProjectsRoot(), excludedPaths: excludedPaths() });
       lastDiscovery = discovery;
+      const roots = new Map<string, string | undefined>();
+      for (const s of discovery.sessions) {
+        if (s.cwd) {
+          roots.set(s.sessionId, await repoRoots.get(s.cwd));
+        }
+      }
       const poll = await tailer.poll(discovery.sessions);
       ingestion.lastPoll = poll.stats;
       ingestion.totalEvents += ingest(poll.events).length;
@@ -109,8 +122,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
         const now = new Date();
         for (const s of discovery.sessions) {
           recordDiscoveredSession(state, s, now);
+          const root = roots.get(s.sessionId);
+          if (root) {
+            state.sessions[s.sessionId].repoRoot = root;
+          }
         }
         state.cursors = tailer.exportCursors(new Set(discovery.sessions.map((s) => s.transcriptPath)));
+        regroup(state);
       });
       tree.setRoots(buildSessionNodes(discovery, new Date()));
       view.message = viewMessage(discovery);
@@ -163,6 +181,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
       return lines;
     }),
     ...registerHookCommands(context, () => void refresh()),
+    ...registerWorkstreamCommands(stateService, () => void refresh()),
     // Transcripts are also re-read periodically, so sessions without hooks still update.
     disposableInterval(() => void refresh(), 60_000),
     { dispose: () => clearTimeout(hookRefreshTimer) },

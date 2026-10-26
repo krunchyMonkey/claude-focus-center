@@ -105,6 +105,18 @@ const tests: Array<[string, () => Promise<void>]> = [
     assert.doesNotMatch(JSON.stringify(saved), /Synthetic request\.|Synthetic reply\./);
     assert.ok(!api.statePath.startsWith(String(process.env.CLAUDE_CONFIG_DIR)), 'state lives outside Claude folders');
   }],
+  ['sessions are grouped by repo + branch and exact refs, never by name alone', async () => {
+    const api = await activate();
+    await vscode.commands.executeCommand('focusCenter.refresh');
+    const [s1, s2, s3, s4] = tenSessions(); // alpha feat/login ×2, alpha main, beta fix/123-header
+    const wsOf = (id: string) => Object.values(api.getState().workstreams).find((w) => w.sessionIds.includes(id));
+    assert.equal(wsOf(s1.sessionId)?.id, wsOf(s2.sessionId)?.id);
+    assert.equal(wsOf(s1.sessionId)?.basis, 'repo-branch');
+    assert.notEqual(wsOf(s3.sessionId)?.id, wsOf(s1.sessionId)?.id);
+    assert.equal(wsOf(s4.sessionId)?.basis, 'work-item');
+    const commands = await vscode.commands.getCommands(true);
+    assert.ok(commands.includes('focusCenter.linkSession') && commands.includes('focusCenter.unlinkSession'));
+  }],
   ['excludedPaths setting removes a repository on refresh', async () => {
     const api = await activate();
     await setExcluded([SYNTHETIC_REPOS.beta]);

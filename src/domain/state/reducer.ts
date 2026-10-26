@@ -2,6 +2,7 @@
 // this layer records sessions, dedupes events across restarts and keeps the journal bounded.
 import { classifyEvent, ClassifyOptions, DEFAULT_CLASSIFY_OPTIONS } from '../attention/classifier';
 import type { NormalizedEvent } from '../events/types';
+import { refsFromText } from '../workstreams/refs';
 import type { FocusState, JournalEntry, SessionRecord } from './types';
 
 export const MAX_PROCESSED_IDS = 50_000;
@@ -59,6 +60,8 @@ export function recordDiscoveredSession(
     lastEventAt: known?.lastEventAt,
     lastSeenAt: now.toISOString(),
     markers: known?.markers,
+    repoRoot: known?.repoRoot,
+    workItemHints: known?.workItemHints,
   });
 }
 
@@ -87,7 +90,26 @@ function recordSession(state: FocusState, event: NormalizedEvent, now: Date): vo
     lastEventAt,
     lastSeenAt: now.toISOString(),
     markers: known?.markers,
+    repoRoot: known?.repoRoot,
+    workItemHints: mergeHints(known?.workItemHints, event),
   });
+}
+
+const MAX_HINTS = 10;
+
+/** Keeps only explicit work-item tokens from task subjects, never the subject text itself. */
+function mergeHints(known: string[] | undefined, event: NormalizedEvent): string[] | undefined {
+  if ((event.kind !== 'task-created' && event.kind !== 'task-completed') || !event.excerpt) {
+    return known;
+  }
+  const found = refsFromText(event.excerpt, 'repo').map((r) => r.label);
+  const merged = [...(known ?? [])];
+  for (const label of found) {
+    if (!merged.includes(label) && merged.length < MAX_HINTS) {
+      merged.push(label);
+    }
+  }
+  return merged.length ? merged : undefined;
 }
 
 /** Persisted objects never carry undefined fields, so in-memory and reloaded state compare equal. */

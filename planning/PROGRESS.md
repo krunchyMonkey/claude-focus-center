@@ -6,10 +6,10 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 
 - Date: 2026-10-26
 - Current milestone: **M0 — Foundation**
-- Last verified issue: **07-attention-rules** (GitHub #7)
-- Next ready issue: **08-workstream-grouping** (also ready: 09-sidebar)
+- Last verified issue: **08-workstream-grouping** (GitHub #8)
+- Next ready issue: **09-sidebar** (then 10, 11, 13)
 - Current branch / commit: **`feat/mvp`** (local only; not pushed, no draft PR — awaiting owner approval)
-- Last executed verification: `npm run typecheck` + `npm test` (132/132 unit, 10/10 extension-host on VS Code 1.100.0)
+- Last executed verification: `npm run typecheck` + `npm test` (143/143 unit, 11/11 extension-host on VS Code 1.100.0)
 - Known blockers: none for M0. See "Environment notes" for platform differences and doc gaps.
 
 ## Environment notes (probed 2026-10-26)
@@ -33,7 +33,7 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 | 05-event-ingestion | Verified | 90/90 unit (real hook script, 12 concurrent writers, replay); 9/9 host, hook→extension 285–303 ms | `feat/mvp` (local) |
 | 06-state-model | Verified | 105/105 unit (restart, replay, corruption recovery); 10/10 host (state.json written) | `feat/mvp` (local) |
 | 07-attention-rules | Verified | 20 curated scenarios; Needs You precision 100% (7/7), recall 100%; order- and replay-invariant; host: hook → Needs You item | `feat/mvp` (local) |
-| 08-workstream-grouping | Not started | — | — |
+| 08-workstream-grouping | Verified | 143/143 unit (same ticket merges, same-name repos separate, manual link survives re-import, conflicts kept); 11/11 host | `feat/mvp` (local) |
 | 09-sidebar | Not started | — | — |
 | 10-resume-details | Not started | — | — |
 | 11-triage-controls | Not started | — | — |
@@ -142,6 +142,19 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 - Bugs found and fixed during verification: "turn ended on failure" and "session ended while pending" depended on arrival order (now marker-based); "I need your approval" was classed as review rather than decision.
 - Risks / still unverified: precision is measured on scenarios written alongside the rules, so real-session precision is unknown until the pilot (issue 14). Parallel tool calls could make a pending permission look answered when a sibling tool's result lands later (would show as Resolved, not hidden). Text asks are English-only. The stale window (7 days) is fixed, not a setting.
 - Next ready issue: 08-workstream-grouping.
+- Decision or permission needed: none.
+
+### 2026-10-26 — Issue 08 / Cross-session grouping
+- Status: Verified (automated). Manual link/unlink quick-pick flows were not exercised by hand.
+- Branch / commit / draft PR: `feat/mvp`, commit "feat(08): conservative workstream grouping…"; not pushed.
+- Changed: `src/domain/workstreams/refs.ts` (exact namespaced refs: `AB#n` → `ado:n`, `PROJ-n` → `jira:PROJ-n` with standards such as UTF/ISO/SHA/RFC/CVE excluded, bare `#n` / `123-…` branch → `github:<repo key>#n`), `src/domain/workstreams/group.ts` (pure `regroup`: manual link > work-item ref (branch, then task-subject tokens) > repo root + branch > session alone; repo identity case-folded only on win32/darwin; conflict notes for "one session reports complete while another has open items" and "one session references two tickets"; `linkSession` / `linkToNewWorkstream` / `unlinkSession` journaled as user actions), `src/adapters/git/repoRoot.ts` (nearest ancestor with `.git` folder or file, existence check only, cached), session fields `repoRoot` and `workItemHints` (only the tokens, not task text), `Workstream.conflicts`, `manualWorkstreamTitles`. Commands "Link Session to Workstream…" and "Restore Automatic Grouping…" (quick picks; accept a session id for tree menus later). Regroup runs after every refresh and every applied batch; items follow their session's workstream.
+- Checks actually run (command + result):
+  - `npm run typecheck` → no errors.
+  - `npm run test:unit` → 143 pass, 0 fail. Includes: same Jira key merges sessions across two repos; a task-subject ref links a session with an unrelated branch; four sessions in two same-named `api` repos stay separate (same branches, same `#123`); repo-root grouping includes a subfolder session but not a worktree or another branch; manual link + "keep separate" survive re-import and new events; unlink restores automatic grouping; unique ids for same-named manual workstreams; both conflict notes; a permission request is not hidden by a sibling's completion; regroup deterministic and idempotent; repo-root detection for `.git` folder and worktree `.git` file.
+  - `npm run test:host` → 11/11, including grouping of the synthetic fixture sessions (alpha feat/login ×2 together, alpha main separate, beta `fix/123-header` grouped by work item).
+- Fixed during verification: standards tokens (e.g. "UTF-8") in task subjects would have merged unrelated sessions as one Jira ticket.
+- What is still unverified: repo-root detection on real repositories and network drives; quick-pick UX by hand; uppercase tokens outside the standards denylist can still look like Jira keys when written in task subjects.
+- Next ready issue: 09-sidebar.
 - Decision or permission needed: none.
 
 ## Checkpoint template (copy for each completed issue)

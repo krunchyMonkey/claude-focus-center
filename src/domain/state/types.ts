@@ -8,8 +8,12 @@ export interface SessionRecord {
   source: 'claude-local';
   sessionId: string;
   cwd?: string;
+  /** Nearest ancestor of cwd containing `.git`, when it could be determined. */
+  repoRoot?: string;
   transcriptPath?: string;
   gitBranch?: string;
+  /** Explicit work-item tokens seen in task subjects (e.g. `AB#12`, `PROJ-3`, `#7`), bounded. */
+  workItemHints?: string[];
   /** Newest source timestamp seen in any event for this session. */
   lastEventAt?: string;
   /** Last time discovery or an event showed this session. */
@@ -69,6 +73,8 @@ export interface Workstream {
   sessionIds: string[];
   /** How the grouping was decided, for explainability. */
   basis: 'session' | 'repo-branch' | 'work-item' | 'manual';
+  /** Disagreements between member sessions, kept visible rather than resolved silently. */
+  conflicts?: string[];
 }
 
 export interface JournalEntry {
@@ -90,6 +96,8 @@ export interface FocusState {
   workstreams: Record<string, Workstream>;
   /** Manual session → workstream links; always win over automatic grouping. */
   manualLinks: Record<string, string>;
+  /** Names of user-created workstreams (`manual:*`). */
+  manualWorkstreamTitles?: Record<string, string>;
   /** Event ids already applied, oldest first (bounded); makes replay across restarts a no-op. */
   processedEventIds: string[];
   /** Transcript read positions keyed by transcript path. */
