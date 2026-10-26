@@ -1,4 +1,5 @@
 // Pure diagnostics formatting: no VS Code or filesystem access, so it is unit-testable.
+import type { DiscoveryResult } from '../adapters/claudeSessions/discovery';
 
 export type CoverageState = 'active' | 'partial' | 'unavailable' | 'not-implemented';
 
@@ -16,6 +17,12 @@ export interface DiagnosticsInput {
   storagePath: string;
   generatedAt: Date;
   coverage: CoverageEntry[];
+  sections?: DiagnosticsSection[];
+}
+
+export interface DiagnosticsSection {
+  title: string;
+  lines: string[];
 }
 
 /**
@@ -44,6 +51,9 @@ export function buildDiagnosticsReport(input: DiagnosticsInput): string[] {
   for (const entry of input.coverage) {
     lines.push(`  ${entry.source}: ${entry.state} — ${entry.detail}`);
   }
+  for (const section of input.sections ?? []) {
+    lines.push('', section.title, ...section.lines.map((l) => `  ${l}`));
+  }
   lines.push('', `Summary: ${summarizeCoverage(input.coverage)}`);
   return lines;
 }
@@ -54,4 +64,35 @@ export function summarizeCoverage(coverage: CoverageEntry[]): string {
   }
   const active = coverage.filter((c) => c.state === 'active').length;
   return `partial coverage (${active} of ${coverage.length} sources active); items may be missing.`;
+}
+
+/** Coverage for the session-file source; unreadable files or projects make it partial. */
+export function discoveryCoverage(result: DiscoveryResult | undefined): CoverageEntry {
+  const source = 'Claude session files';
+  if (!result) {
+    return { source, state: 'unavailable', detail: 'discovery has not run yet' };
+  }
+  if (!result.rootFound) {
+    return { source, state: 'unavailable', detail: `session folder not available: ${result.root}` };
+  }
+  const blocking = result.issues.filter((i) => i.code === 'project-unreadable' || i.code === 'file-unreadable' || i.code === 'root-unreadable');
+  const detail = `${result.sessions.length} session(s), ${result.excludedCount} excluded`;
+  return blocking.length > 0
+    ? { source, state: 'partial', detail: `${detail}, ${blocking.length} unreadable` }
+    : { source, state: 'active', detail };
+}
+
+/** Discovery details: counts and issue codes with local paths only, never transcript content. */
+export function discoverySection(result: DiscoveryResult | undefined): DiagnosticsSection {
+  if (!result) {
+    return { title: 'Session discovery', lines: ['not run yet'] };
+  }
+  const lines = [
+    `Root: ${result.root} (${result.rootFound ? 'found' : 'not found'})`,
+    `Sessions listed: ${result.sessions.length}`,
+    `Excluded: ${result.excludedCount}`,
+    `Issues: ${result.issues.length}`,
+    ...result.issues.map((i) => `- ${i.code}: ${i.path}${i.detail ? ` (${i.detail})` : ''}`),
+  ];
+  return { title: 'Session discovery', lines };
 }

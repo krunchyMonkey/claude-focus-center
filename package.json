@@ -40,7 +40,7 @@
     "viewsWelcome": [
       {
         "view": "focusCenter.queue",
-        "contents": "Nothing needs your attention yet.\nSession discovery is not implemented in this build, so the queue is always empty.\n[Refresh](command:focusCenter.refresh)\n[Show Diagnostics](command:focusCenter.showDiagnostics)"
+        "contents": "No Claude Code sessions found.\nFocus Center reads session metadata from your local Claude Code folder (read-only, nothing leaves this machine).\n[Refresh](command:focusCenter.refresh)\n[Show Diagnostics](command:focusCenter.showDiagnostics)"
       }
     ],
     "commands": [
@@ -70,6 +70,20 @@
           "group": "navigation@2"
         }
       ]
+    },
+    "configuration": {
+      "title": "Focus Center",
+      "properties": {
+        "focusCenter.excludedPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "application",
+          "markdownDescription": "Project folders whose Claude Code sessions are never read. A path also excludes its subfolders; `~` expands to your home folder. Matching errs towards exclusion."
+        }
+      }
     }
   },
   "scripts": {

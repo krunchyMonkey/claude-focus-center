@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildDiagnosticsReport, CoverageEntry, summarizeCoverage } from '../../diagnostics/report';
+import { buildDiagnosticsReport, CoverageEntry, discoveryCoverage, discoverySection, summarizeCoverage } from '../../diagnostics/report';
 
 const base = {
   extensionVersion: '0.0.1',
@@ -41,4 +41,22 @@ test('report with no registered sources is partial, not complete', () => {
 
 test('summary reports complete coverage only when every source is active', () => {
   assert.equal(summarizeCoverage([{ source: 'a', state: 'active', detail: '' }]), 'all registered sources are active.');
+});
+
+test('discovery coverage: unavailable when root missing, partial when files unreadable, else active', () => {
+  const ok = { root: '/synthetic/root', rootFound: true, sessions: [], excludedCount: 2, issues: [] };
+  assert.equal(discoveryCoverage(undefined).state, 'unavailable');
+  assert.equal(discoveryCoverage({ ...ok, rootFound: false }).state, 'unavailable');
+  assert.deepEqual(discoveryCoverage(ok), { source: 'Claude session files', state: 'active', detail: '0 session(s), 2 excluded' });
+  const partial = discoveryCoverage({ ...ok, issues: [{ code: 'file-unreadable', path: '/synthetic/root/p/x.jsonl' }] });
+  assert.equal(partial.state, 'partial');
+  // Benign issues do not reduce coverage.
+  assert.equal(discoveryCoverage({ ...ok, issues: [{ code: 'no-metadata', path: '/x' }] }).state, 'active');
+});
+
+test('discovery section lists issue codes and paths', () => {
+  const section = discoverySection({ root: '/r', rootFound: true, sessions: [], excludedCount: 0, issues: [{ code: 'no-metadata', path: '/r/p/s.jsonl', detail: 'no cwd' }] });
+  const text = buildDiagnosticsReport({ ...base, coverage: [], sections: [section] }).join('\n');
+  assert.match(text, /Session discovery\n {2}Root: \/r \(found\)/);
+  assert.match(text, /- no-metadata: \/r\/p\/s\.jsonl \(no cwd\)/);
 });

@@ -6,10 +6,10 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 
 - Date: 2026-10-26
 - Current milestone: **M0 — Foundation**
-- Last verified issue: **01-extension-scaffold** (GitHub #1)
-- Next ready issue: **02-session-discovery** (also dependency-ready: 04-hook-config, 06-state-model)
+- Last verified issue: **02-session-discovery** (GitHub #2)
+- Next ready issue: **03-incremental-reader** (also dependency-ready: 04-hook-config, 06-state-model, 08-workstream-grouping needs 06)
 - Current branch / commit: **`feat/mvp`** (local only; not pushed, no draft PR — awaiting owner approval)
-- Last executed verification: clean `npm ci` + `npm run typecheck` + `npm test` (4/4 unit, 5/5 extension-host on VS Code 1.100.0)
+- Last executed verification: `npm run typecheck` + `npm test` (25/25 unit, 6/6 extension-host on VS Code 1.100.0)
 - Known blockers: none for M0. See "Environment notes" for platform differences and doc gaps.
 
 ## Environment notes (probed 2026-10-26)
@@ -27,7 +27,7 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 | Issue | Status | Verified evidence | Branch / PR |
 | --- | --- | --- | --- |
 | 01-extension-scaffold | Verified | typecheck; 4/4 unit; 5/5 host tests (VS Code 1.100.0) | `feat/mvp` (local) |
-| 02-session-discovery | Not started | — | — |
+| 02-session-discovery | Verified | 25/25 unit; 6/6 host tests with 10 synthetic sessions / 4 repos | `feat/mvp` (local) |
 | 03-incremental-reader | Not started | — | — |
 | 04-hook-config | Not started | — | — |
 | 05-event-ingestion | Not started | — | — |
@@ -57,6 +57,19 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 - What is still unverified: rendering on VS Code 1.142; macOS/Linux; moving the view to the secondary sidebar (issue 09); CI `build` job has not run (branch not pushed).
 - Next ready issue: 02-session-discovery.
 - Decision or permission needed: approval to push `feat/mvp` / open a draft PR (repo is public).
+
+### 2026-10-26 — Issue 02 / Discover local Claude Code sessions
+- Status: Verified (automated, synthetic fixtures only).
+- Branch / commit / draft PR: `feat/mvp`, commit "feat(02): discover local Claude Code sessions…"; not pushed.
+- Changed: `src/adapters/claudeSessions/paths.ts` (default root honouring `CLAUDE_CONFIG_DIR`, folder-name encoding, conservative exclusion matching), `src/adapters/claudeSessions/discovery.ts` (bounded discovery: newest 200 files, 64 KB header parse for cwd/branch, safe session-ID charset, duplicate/unreadable/missing diagnostics, no symlink following, no content retained), `src/ui/nodes.ts` (pure tree model: "Recent sessions" group), `src/ui/focusTreeProvider.ts` (descriptions, tooltips, icons), `src/diagnostics/report.ts` (session coverage + discovery section), `src/extension.ts` (discovery on activation/Refresh/setting change; serialised refresh; view message for missing root or partial coverage), `package.json` (`focusCenter.excludedPaths`, new welcome text), `src/test/fixtures/sessions.ts` (synthetic generator, written to temp dirs because `*.jsonl` is git-ignored), unit + host tests, README "What it reads".
+- Checks actually run (command + result):
+  - `npm run typecheck` → no errors.
+  - `npm run test:unit` → 25 pass, 0 fail (discovery: 10 unique sessions across 4 repos with id/path/cwd/branch/timestamp; missing root → `root-missing`; folder-level exclusion skips before read; cwd-level exclusion fallback; malformed/partial/empty lines; header byte budget; duplicate IDs; unsafe file names; max-session bound; subagent subfolders ignored; Windows/POSIX exclusion matching).
+  - `npm run test:host` (VS Code 1.100.0, `CLAUDE_CONFIG_DIR` → temp synthetic root) → 6/6: Refresh lists 10 sessions/4 repos; Diagnostics shows "10 session(s), 0 excluded" and partial coverage (hooks missing); `excludedPaths` drops a repo to 7; with all repos excluded Refresh/Diagnostics still work and the tree is empty.
+- Manual smoke test: not performed. F5 on this machine would read **real** session headers from `%USERPROFILE%\.claude\projects`; the agent has not run or inspected that.
+- What is still unverified: behaviour on real Claude Code transcripts (format assumed from public behaviour: `<root>/<encoded cwd>/<sessionId>.jsonl`, records with `cwd`/`gitBranch`); unreadable-file path on Windows (cannot chmod); macOS/Linux.
+- Next ready issue: 03-incremental-reader.
+- Decision or permission needed: none new.
 
 ## Checkpoint template (copy for each completed issue)
 

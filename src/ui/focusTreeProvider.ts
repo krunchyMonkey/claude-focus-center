@@ -1,11 +1,5 @@
 import * as vscode from 'vscode';
-
-/** A node in the Focus Center tree. Status groups and items arrive in later issues. */
-export interface FocusNode {
-  id: string;
-  label: string;
-  children?: FocusNode[];
-}
+import type { FocusNode } from './nodes';
 
 export class FocusTreeProvider implements vscode.TreeDataProvider<FocusNode>, vscode.Disposable {
   private readonly changed = new vscode.EventEmitter<FocusNode | undefined>();
@@ -15,10 +9,6 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<FocusNode>, vs
 
   setRoots(roots: FocusNode[]): void {
     this.roots = roots;
-    this.refresh();
-  }
-
-  refresh(): void {
     this.changed.fire(undefined);
   }
 
@@ -28,6 +18,11 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<FocusNode>, vs
       : vscode.TreeItemCollapsibleState.None;
     const item = new vscode.TreeItem(node.label, state);
     item.id = node.id;
+    item.description = node.description;
+    item.tooltip = node.tooltip;
+    if (node.icon) {
+      item.iconPath = new vscode.ThemeIcon(node.icon);
+    }
     return item;
   }
 

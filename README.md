@@ -4,7 +4,7 @@
 
 A planned local-first VS Code extension that turns activity across multiple Claude Code sessions, repositories, and worktrees into a concise attention queue.
 
-> **Project status (2026-10-26):** implementation-ready specification and Claude Code handoff in the public [GitHub repository](https://github.com/krunchyMonkey/claude-focus-center). Implementation is in progress on the `feat/mvp` branch; the first slice (an empty native Focus Center view with Refresh and Diagnostics) builds and passes its tests. See [planning/PROGRESS.md](planning/PROGRESS.md).
+> **Project status (2026-10-26):** implementation-ready specification and Claude Code handoff in the public [GitHub repository](https://github.com/krunchyMonkey/claude-focus-center). Implementation is in progress on the `feat/mvp` branch; the Focus Center view with Refresh/Diagnostics and read-only local session discovery builds and passes its tests. See [planning/PROGRESS.md](planning/PROGRESS.md).
 
 ## The problem
 
@@ -61,7 +61,12 @@ npm test                 # both
 
 `npm run test:host` downloads VS Code 1.100.0 (the supported minimum) into `.vscode-test/` on first run. To use an installed VS Code instead, set `FOCUS_CENTER_VSCODE_EXE` to its executable path (VS Code must not be mid-update). The runner clears `ELECTRON_RUN_AS_NODE` so it also works from a VS Code integrated terminal.
 
-**Try it:** open this folder in VS Code and press <kbd>F5</kbd> ("Run Extension"). In the Extension Development Host, open the **Focus Center** activity-bar icon: the Attention Queue is empty and offers **Refresh** and **Show Diagnostics** (also available from the Command Palette under "Focus Center"). Diagnostics writes a local health report to the *Focus Center* output channel and never claims full coverage while sources are missing.
+**Try it:** open this folder in VS Code and press <kbd>F5</kbd> ("Run Extension"). In the Extension Development Host, open the **Focus Center** activity-bar icon: the Attention Queue lists **Recent sessions** found under your local Claude Code folder (repo, branch, last change; hover for session ID and transcript path), or an empty-state message with **Refresh** and **Show Diagnostics** (also in the Command Palette under "Focus Center"). Diagnostics writes a local health report to the *Focus Center* output channel and never claims full coverage while sources are missing.
+
+### What it reads
+
+- Session root: `~/.claude/projects` (or `$CLAUDE_CONFIG_DIR/projects`). Only the 200 most recently modified `<project>/<session>.jsonl` files are considered, and only their first 64 KB is parsed to find the working directory and git branch. No message content is kept. Transcripts are never modified.
+- `focusCenter.excludedPaths` (user setting): project folders that are skipped **before** any of their transcripts is opened. A path also excludes subfolders and `~` expands to your home folder. Because Claude's folder naming is lossy, matching errs towards excluding more.
 
 ## Documents
 

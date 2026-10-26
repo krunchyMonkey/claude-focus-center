@@ -1,15 +1,13 @@
-// Runs inside the Extension Development Host. A tiny sequential harness keeps test dependencies minimal.
+// Runs inside the Extension Development Host with CLAUDE_CONFIG_DIR pointing at ten synthetic
+// sessions (see runHostTests.ts). A tiny sequential harness keeps test dependencies minimal.
 import assert from 'node:assert/strict';
 import * as vscode from 'vscode';
 import type { FocusCenterApi } from '../../extension';
+import { SYNTHETIC_REPOS } from '../fixtures/sessions';
 
 const EXTENSION_ID = 'krunchymonkey.claude-focus-center';
 
 const tests: Array<[string, () => Promise<void>]> = [
-  ['extension activates and exposes an empty queue', async () => {
-    const api = await activate();
-    assert.deepEqual(api.getRootNodes(), []);
-  }],
   ['contributed commands are registered', async () => {
     await activate();
     const commands = await vscode.commands.getCommands(true);
@@ -17,20 +15,50 @@ const tests: Array<[string, () => Promise<void>]> = [
       assert.ok(commands.includes(id), `missing command ${id}`);
     }
   }],
-  ['Refresh works with no sessions', async () => {
-    await activate();
-    await vscode.commands.executeCommand('focusCenter.refresh');
-  }],
-  ['Diagnostics reports partial coverage with no sessions', async () => {
-    await activate();
-    const lines = await vscode.commands.executeCommand<string[]>('focusCenter.showDiagnostics');
-    const text = lines.join('\n');
-    assert.match(text, /Collection coverage/);
-    assert.match(text, /partial coverage/);
-  }],
   ['Focus Center view can be revealed', async () => {
     await activate();
     await vscode.commands.executeCommand('focusCenter.queue.focus');
+  }],
+  ['Refresh lists ten synthetic sessions from four repositories', async () => {
+    const api = await activate();
+    await vscode.commands.executeCommand('focusCenter.refresh');
+    const roots = api.getRootNodes();
+    assert.equal(roots.length, 1);
+    const sessions = roots[0].children ?? [];
+    assert.equal(sessions.length, 10);
+    assert.equal(new Set(sessions.map((s) => s.id)).size, 10);
+    assert.equal(new Set(sessions.map((s) => s.label)).size, 4);
+  }],
+  ['Diagnostics reports discovery counts and partial (hooks missing) coverage', async () => {
+    await activate();
+    const text = (await vscode.commands.executeCommand<string[]>('focusCenter.showDiagnostics')).join('\n');
+    assert.match(text, /Claude session files: active — 10 session\(s\), 0 excluded/);
+    assert.match(text, /Sessions listed: 10/);
+    assert.match(text, /partial coverage/);
+  }],
+  ['excludedPaths setting removes a repository on refresh', async () => {
+    const api = await activate();
+    await setExcluded([SYNTHETIC_REPOS.beta]);
+    try {
+      await vscode.commands.executeCommand('focusCenter.refresh');
+      assert.equal(api.getRootNodes()[0]?.children?.length, 7);
+      assert.equal(api.getLastDiscovery()?.excludedCount, 1);
+    } finally {
+      await setExcluded([]);
+    }
+  }],
+  ['Refresh and Diagnostics work when no sessions are visible', async () => {
+    const api = await activate();
+    await setExcluded(Object.values(SYNTHETIC_REPOS));
+    try {
+      await vscode.commands.executeCommand('focusCenter.refresh');
+      assert.deepEqual(api.getRootNodes(), []);
+      const text = (await vscode.commands.executeCommand<string[]>('focusCenter.showDiagnostics')).join('\n');
+      assert.match(text, /Sessions listed: 0/);
+    } finally {
+      await setExcluded([]);
+      await vscode.commands.executeCommand('focusCenter.refresh');
+    }
   }],
 ];
 
@@ -38,6 +66,10 @@ async function activate(): Promise<FocusCenterApi> {
   const ext = vscode.extensions.getExtension<FocusCenterApi>(EXTENSION_ID);
   assert.ok(ext, `extension ${EXTENSION_ID} not found`);
   return ext.activate();
+}
+
+async function setExcluded(paths: string[]): Promise<void> {
+  await vscode.workspace.getConfiguration('focusCenter').update('excludedPaths', paths, vscode.ConfigurationTarget.Global);
 }
 
 export async function run(): Promise<void> {
