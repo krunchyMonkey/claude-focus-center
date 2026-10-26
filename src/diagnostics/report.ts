@@ -175,9 +175,18 @@ export function stateSection(
       ...(loaded.recovery
         ? [`Recovered: ${loaded.recovery.problem}${loaded.recovery.movedTo ? `; original kept at ${loaded.recovery.movedTo}` : ''}`]
         : []),
-      `Sessions: ${Object.keys(state.sessions).length}; items: ${Object.keys(state.items).length}; workstreams: ${Object.keys(state.workstreams).length}`,
+      `Sessions: ${Object.keys(state.sessions).length}; items: ${Object.keys(state.items).length} (${itemCounts(state)}); workstreams: ${Object.keys(state.workstreams).length}`,
       `Events applied (dedupe window): ${state.processedEventIds.length}; journal entries: ${state.journal.length}; transcript cursors: ${Object.keys(state.cursors).length}`,
       `Last saved: ${service.lastSavedAt ?? 'not this run'}${service.lastSaveError ? `; LAST SAVE FAILED: ${service.lastSaveError}` : ''}`,
     ],
   };
+}
+
+function itemCounts(state: FocusState): string {
+  const counts: Record<string, number> = {};
+  for (const item of Object.values(state.items)) {
+    counts[item.status] = (counts[item.status] ?? 0) + 1;
+  }
+  const order = ['needs-you', 'in-progress', 'waiting', 'uncertain', 'resolved'];
+  return order.map((s) => `${s} ${counts[s] ?? 0}`).join(', ');
 }

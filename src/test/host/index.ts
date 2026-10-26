@@ -81,6 +81,12 @@ const tests: Array<[string, () => Promise<void>]> = [
     assert.equal(await runNode([script, 'PermissionRequest', api.spoolDir], input), 0);
     await api.scanHookSpool();
     assert.equal(api.getHookIngestion().totalEvents, before + 1);
+
+    // The permission request is classified as a direct Needs You item with hook evidence.
+    const items = Object.values(api.getState().items).filter((i) => i.sourceSessionIds.includes('host-sess-1'));
+    assert.equal(items.length, 1);
+    assert.deepEqual([items[0].kind, items[0].status, items[0].confidence, items[0].title], ['permission', 'needs-you', 'direct', 'Permission needed: Bash']);
+    assert.equal(items[0].evidence[0].kind, 'hook');
     const text = (await vscode.commands.executeCommand<string[]>('focusCenter.showDiagnostics')).join('\n');
     assert.match(text, /Received this run: 1 \(permission-request 1\)/);
   }],

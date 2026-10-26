@@ -1,5 +1,6 @@
 // Deterministic, idempotent state transitions. Attention classification plugs in here (issue 07);
 // this layer records sessions, dedupes events across restarts and keeps the journal bounded.
+import { classifyEvent, ClassifyOptions, DEFAULT_CLASSIFY_OPTIONS } from '../attention/classifier';
 import type { NormalizedEvent } from '../events/types';
 import type { FocusState, JournalEntry, SessionRecord } from './types';
 
@@ -16,7 +17,7 @@ export interface ApplyResult {
  * Applies events in order, skipping ids already processed (in this batch or any earlier one,
  * including before a restart). Mutates `state`; the same inputs always produce the same state.
  */
-export function applyEvents(state: FocusState, events: readonly NormalizedEvent[], now: Date): ApplyResult {
+export function applyEvents(state: FocusState, events: readonly NormalizedEvent[], now: Date, options: ClassifyOptions = DEFAULT_CLASSIFY_OPTIONS): ApplyResult {
   const processed = new Set(state.processedEventIds);
   const applied: NormalizedEvent[] = [];
   let duplicates = 0;
@@ -29,6 +30,9 @@ export function applyEvents(state: FocusState, events: readonly NormalizedEvent[
     state.processedEventIds.push(event.id);
     applied.push(event);
     recordSession(state, event, now);
+    for (const change of classifyEvent(state, event, now, options)) {
+      journal(state, now, { type: change.type, sessionId: event.sessionId, itemId: change.itemId, summary: change.summary, eventId: event.id });
+    }
   }
   if (state.processedEventIds.length > MAX_PROCESSED_IDS) {
     state.processedEventIds.splice(0, state.processedEventIds.length - MAX_PROCESSED_IDS);
@@ -54,6 +58,7 @@ export function recordDiscoveredSession(
     gitBranch: s.gitBranch ?? known?.gitBranch,
     lastEventAt: known?.lastEventAt,
     lastSeenAt: now.toISOString(),
+    markers: known?.markers,
   });
 }
 
@@ -81,6 +86,7 @@ function recordSession(state: FocusState, event: NormalizedEvent, now: Date): vo
     gitBranch: event.gitBranch ?? known?.gitBranch,
     lastEventAt,
     lastSeenAt: now.toISOString(),
+    markers: known?.markers,
   });
 }
 

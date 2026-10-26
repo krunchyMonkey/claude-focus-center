@@ -65,6 +65,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
   const ingestion: { totalEvents: number; lastPoll?: PollStats } = { totalEvents: 0 };
   const spoolDir = spoolDirFor(storageDir);
   const hookIngestion: HookIngestion = { totalEvents: 0, byKind: {} };
+  let hookRefreshTimer: NodeJS.Timeout | undefined;
 
   /** Single entry point for new events from any source: deduped against everything already applied. */
   const ingest = (events: NormalizedEvent[]): NormalizedEvent[] => {
@@ -80,7 +81,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
     new SpoolConsumer(spoolDir),
     (events, stats) => {
       hookIngestion.lastScan = stats;
-      for (const e of ingest(events)) {
+      const applied = ingest(events);
+      if (applied.length > 0) {
+        // Hooks are a cue that transcripts changed too: re-read soon so answers resolve items.
+        clearTimeout(hookRefreshTimer);
+        hookRefreshTimer = setTimeout(() => void refresh(), 1500);
+      }
+      for (const e of applied) {
         hookIngestion.totalEvents++;
         hookIngestion.byKind[e.kind] = (hookIngestion.byKind[e.kind] ?? 0) + 1;
         if (e.timestamp && (!hookIngestion.lastEventAt || e.timestamp > hookIngestion.lastEventAt)) {
@@ -156,6 +163,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
       return lines;
     }),
     ...registerHookCommands(context, () => void refresh()),
+    // Transcripts are also re-read periodically, so sessions without hooks still update.
+    disposableInterval(() => void refresh(), 60_000),
+    { dispose: () => clearTimeout(hookRefreshTimer) },
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('focusCenter.excludedPaths')) {
         void refresh();
@@ -182,6 +192,11 @@ export async function deactivate(): Promise<void> {
   // Subscriptions are disposed by VS Code; pending state must still reach disk.
   await activeState?.flush();
   activeState = undefined;
+}
+
+function disposableInterval(fn: () => void, ms: number): vscode.Disposable {
+  const handle = setInterval(fn, ms);
+  return { dispose: () => clearInterval(handle) };
 }
 
 function excludedPaths(): string[] {

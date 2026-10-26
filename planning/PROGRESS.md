@@ -6,10 +6,10 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 
 - Date: 2026-10-26
 - Current milestone: **M0 — Foundation**
-- Last verified issue: **06-state-model** (GitHub #6)
-- Next ready issue: **07-attention-rules** (also ready: 08-workstream-grouping)
+- Last verified issue: **07-attention-rules** (GitHub #7)
+- Next ready issue: **08-workstream-grouping** (also ready: 09-sidebar)
 - Current branch / commit: **`feat/mvp`** (local only; not pushed, no draft PR — awaiting owner approval)
-- Last executed verification: `npm run typecheck` + `npm test` (105/105 unit, 10/10 extension-host on VS Code 1.100.0)
+- Last executed verification: `npm run typecheck` + `npm test` (132/132 unit, 10/10 extension-host on VS Code 1.100.0)
 - Known blockers: none for M0. See "Environment notes" for platform differences and doc gaps.
 
 ## Environment notes (probed 2026-10-26)
@@ -32,7 +32,7 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 | 04-hook-config | Verified | 75/75 unit (byte-identical install/uninstall); 8/8 host | `feat/mvp` (local) |
 | 05-event-ingestion | Verified | 90/90 unit (real hook script, 12 concurrent writers, replay); 9/9 host, hook→extension 285–303 ms | `feat/mvp` (local) |
 | 06-state-model | Verified | 105/105 unit (restart, replay, corruption recovery); 10/10 host (state.json written) | `feat/mvp` (local) |
-| 07-attention-rules | Not started | — | — |
+| 07-attention-rules | Verified | 20 curated scenarios; Needs You precision 100% (7/7), recall 100%; order- and replay-invariant; host: hook → Needs You item | `feat/mvp` (local) |
 | 08-workstream-grouping | Not started | — | — |
 | 09-sidebar | Not started | — | — |
 | 10-resume-details | Not started | — | — |
@@ -122,6 +122,26 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 - Bug found and fixed during verification: discovered-session records kept `undefined` fields, so in-memory and reloaded state differed.
 - What is still unverified: an actual VS Code restart by hand (restart is simulated by new store/tailer instances); `items`/`workstreams` stay empty until issues 07/08; state of sessions later added to `excludedPaths` is not purged yet (issue 13).
 - Next ready issue: 07-attention-rules.
+- Decision or permission needed: none.
+
+### 2026-10-26 — Issue 07 / Attention classification
+- Status: Verified (automated, curated synthetic scenarios).
+- Branch / commit / draft PR: `feat/mvp`, commit "feat(07): rules-first attention classification…"; not pushed.
+- Rules (`src/domain/attention/classifier.ts`, `text.ts`), run inside the reducer for every newly applied event:
+  - Needs You (direct): `PermissionRequest` / `permission_prompt` notification (merged into one item, P0); `elicitation_dialog` / `agent_needs_input` (P1); `StopFailure` (P1).
+  - Needs You (inferred): explicit closing asks in the last two sentences of assistant text or the Stop excerpt — decision (P1) or review (P2). Code blocks are stripped (including excerpts that start inside one).
+  - Uncertain: turn ended (Stop) right after a failed command with nothing succeeding in between; transcript system errors; needs-you items whose session ended; items older than 7 days.
+  - In Progress / Resolved: `TaskCreated` / `TaskCompleted`, marked "reported complete, not verified".
+  - Never: Stop, SessionEnd, `idle_prompt`, completion prose, subagent (sidechain) text.
+  - Resolution compares source timestamps using per-session markers (`lastPromptAt`, `lastToolUseAt`, `lastClaudeActivityAt`, `lastToolOkAt`, `lastToolFailure`, `lastStop`, `lastSessionEndAt`), so arrival order does not matter. A reply resolves; later Claude activity resolves permissions and failures; a later tool call drops a mid-turn ask. Newer blocking evidence reopens a manually resolved item.
+- Extension: hook arrivals trigger a debounced transcript re-read (1.5 s); periodic refresh every 60 s; Diagnostics shows item counts by status.
+- Checks actually run (command + result):
+  - `npm run typecheck` → no errors.
+  - `npm run test:unit` → 132 pass, 0 fail. 20 curated scenarios (permissions, answered permissions, merged notifications, decisions, completion claims, mid-turn questions, replies, API failure, recovered vs unrecovered tool failures, tasks, task-vs-permission conflict, review, stale, subagent, session end, transcript-only, late hook, code-block question, idle prompt). Needs You precision 100% (7/7), recall 100% (7/7). Every scenario gives the same result with events reversed and is unchanged by replay. Every item has evidence with a source event id and timestamp.
+  - `npm run test:host` → 10/10. A real hook process's `PermissionRequest` becomes a direct Needs You item "Permission needed: Bash" with hook evidence; latency 331 ms.
+- Bugs found and fixed during verification: "turn ended on failure" and "session ended while pending" depended on arrival order (now marker-based); "I need your approval" was classed as review rather than decision.
+- Risks / still unverified: precision is measured on scenarios written alongside the rules, so real-session precision is unknown until the pilot (issue 14). Parallel tool calls could make a pending permission look answered when a sibling tool's result lands later (would show as Resolved, not hidden). Text asks are English-only. The stale window (7 days) is fixed, not a setting.
+- Next ready issue: 08-workstream-grouping.
 - Decision or permission needed: none.
 
 ## Checkpoint template (copy for each completed issue)

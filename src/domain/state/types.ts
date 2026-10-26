@@ -14,6 +14,22 @@ export interface SessionRecord {
   lastEventAt?: string;
   /** Last time discovery or an event showed this session. */
   lastSeenAt: string;
+  /** Source timestamps the attention rules compare against (order-independent). */
+  markers?: SessionMarkers;
+}
+
+export interface SessionMarkers {
+  /** Latest user prompt (you replied). */
+  lastPromptAt?: string;
+  /** Latest tool call by Claude (main conversation). */
+  lastToolUseAt?: string;
+  /** Latest tool call, tool result or assistant text (main conversation). */
+  lastClaudeActivityAt?: string;
+  lastToolOkAt?: string;
+  lastToolFailure?: { timestamp: string; eventId: string; excerpt?: string };
+  lastSessionEndAt?: string;
+  /** Latest turn end (Stop hook). */
+  lastStop?: { timestamp: string; eventId: string };
 }
 
 export interface EvidenceRef {
