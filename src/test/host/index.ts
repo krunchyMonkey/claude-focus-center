@@ -1,42 +1,17 @@
 // Runs inside the Extension Development Host with CLAUDE_CONFIG_DIR pointing at ten synthetic
 // sessions (see runHostTests.ts). A tiny sequential harness keeps test dependencies minimal.
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { FocusCenterApi } from '../../extension';
+import { installNetworkTrap, runNode, runSuite } from '../harness';
 import { SYNTHETIC_REPOS, SYNTHETIC_SETTINGS, tenSessions, writeSessions } from '../fixtures/sessions';
 
 const EXTENSION_ID = 'krunchymonkey.claude-focus-center';
 
-// Network trap, installed before the extension is activated: any network call whose stack passes
-// through the extension's compiled code (but not this test folder) is recorded.
-const networkCalls: string[] = [];
-(function trapNetwork(): void {
-  const ourOut = path.resolve(__dirname, '..', '..') + path.sep;
-  const testDir = path.resolve(__dirname, '..') + path.sep;
-  const fromExtension = (stack: string) => stack.split('\n').some((l) => l.includes(ourOut) && !l.includes(testDir));
-  const wrap = (mod: Record<string, unknown>, name: string, fn: string) => {
-    const original = mod[fn];
-    if (typeof original !== 'function') {
-      return;
-    }
-    mod[fn] = function (this: unknown, ...args: unknown[]) {
-      const stack = new Error().stack ?? '';
-      if (fromExtension(stack)) {
-        networkCalls.push(`${name}.${fn}`);
-      }
-      return (original as (...a: unknown[]) => unknown).apply(this, args);
-    };
-  };
-  for (const [name, fns] of [['http', ['request', 'get']], ['https', ['request', 'get']], ['net', ['connect', 'createConnection']], ['tls', ['connect']], ['dns', ['lookup', 'resolve']]] as const) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require(`node:${name}`) as Record<string, unknown>;
-    fns.forEach((fn) => wrap(mod, name, fn));
-  }
-  wrap(globalThis as unknown as Record<string, unknown>, 'global', 'fetch');
-})();
+// Installed before the extension activates; see harness.ts.
+const networkCalls = installNetworkTrap(path.resolve(__dirname, '..', '..'), path.resolve(__dirname, '..'));
 
 const tests: Array<[string, () => Promise<void>]> = [
   ['contributed commands are registered', async () => {
@@ -387,31 +362,11 @@ async function activate(): Promise<FocusCenterApi> {
   return ext.activate();
 }
 
-function runNode(args: string[], input: string): Promise<number | null> {
-  return new Promise((resolve) => {
-    const child = spawn(process.execPath, args, { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, stdio: ['pipe', 'ignore', 'ignore'] });
-    child.on('exit', resolve);
-    child.stdin.end(input);
-  });
-}
 
 async function setExcluded(paths: string[]): Promise<void> {
   await vscode.workspace.getConfiguration('focusCenter').update('excludedPaths', paths, vscode.ConfigurationTarget.Global);
 }
 
 export async function run(): Promise<void> {
-  const failures: string[] = [];
-  for (const [name, fn] of tests) {
-    try {
-      await fn();
-      console.log(`  ✔ ${name}`);
-    } catch (err) {
-      failures.push(name);
-      console.error(`  ✘ ${name}\n${err instanceof Error ? err.stack : String(err)}`);
-    }
-  }
-  console.log(`${tests.length - failures.length}/${tests.length} host tests passed`);
-  if (failures.length > 0) {
-    throw new Error(`${failures.length} host test(s) failed`);
-  }
+  await runSuite(tests);
 }

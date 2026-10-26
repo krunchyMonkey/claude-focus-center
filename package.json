@@ -310,13 +310,17 @@
     "typecheck": "tsc -p . --noEmit",
     "test:unit": "npm run compile && node --test \"out/test/unit/**/*.test.js\"",
     "test:host": "npm run compile && node ./out/test/runHostTests.js",
-    "test": "npm run test:unit && npm run test:host",
-    "vscode:prepublish": "npm run compile"
+    "test": "npm run test:unit && npm run test:host && npm run test:acceptance",
+    "vscode:prepublish": "npm run compile",
+    "test:acceptance": "npm run compile && node ./out/test/runAcceptance.js",
+    "package": "npm run compile && vsce package --no-dependencies --out focus-center.vsix",
+    "test:vsix": "npm run package && node ./out/test/runVsixSmoke.js"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
     "@types/vscode": "1.100.0",
     "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "4.0.0",
     "typescript": "7.0.2"
   }
 }

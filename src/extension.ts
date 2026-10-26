@@ -46,7 +46,7 @@ export interface FocusCenterApi {
   getRootNodes(): FocusNode[];
   getBadge(): number | undefined;
   getLastDiscovery(): DiscoveryResult | undefined;
-  getIngestion(): { totalEvents: number; lastPoll?: PollStats };
+  getIngestion(): { totalEvents: number; totalInvalidLines: number; lastPoll?: PollStats };
   getHookIngestion(): HookIngestion;
   getState(): FocusState;
   /** Writes pending state now. */
@@ -79,7 +79,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
   let lastDiscovery: DiscoveryResult | undefined;
   const tailer = new TranscriptTailer({}, stateService.state.cursors);
   const repoRoots = new RepoRootCache();
-  const ingestion: { totalEvents: number; lastPoll?: PollStats } = { totalEvents: 0 };
+  const ingestion: { totalEvents: number; totalInvalidLines: number; lastPoll?: PollStats } = { totalEvents: 0, totalInvalidLines: 0 };
   const spoolDir = spoolDirFor(storageDir);
   const hookIngestion: HookIngestion = { totalEvents: 0, byKind: {}, outOfScope: 0 };
   let hookRefreshTimer: NodeJS.Timeout | undefined;
@@ -162,6 +162,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
       }
       const poll = await tailer.poll(discovery.sessions);
       ingestion.lastPoll = poll.stats;
+      ingestion.totalInvalidLines += poll.stats.invalidLines + poll.stats.oversizedLines;
       ingestion.totalEvents += ingest(poll.events).length;
       stateService.update((state) => {
         const now = new Date();
@@ -218,7 +219,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
         sections: [
           stateSection(store.path, stateService),
           discoverySection(lastDiscovery),
-          ingestionSection(ingestion.totalEvents, ingestion.lastPoll),
+          ingestionSection(ingestion.totalEvents, ingestion.lastPoll, ingestion.totalInvalidLines),
           hookSection(spoolDir, spool.watching, hookIngestion, new Date()),
           scopeSection(currentScope(), stateService.state),
         ],

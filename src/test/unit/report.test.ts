@@ -65,6 +65,7 @@ test('ingestion section reports counts without content', () => {
   const section = ingestionSection(5, { filesRead: 1, filesUnchanged: 2, bytesRead: 300, invalidLines: 1, oversizedLines: 0, resets: 0, duplicatesDropped: 0, deferred: 1, errors: [{ path: '/r/x.jsonl', code: 'EACCES' }] });
   assert.deepEqual(section.lines, [
     'Events ingested since start: 5',
+    'Skipped since start: 0 invalid line(s)',
     'Last refresh: 1 file(s) read, 2 unchanged (not reread), 300 bytes',
     'Skipped lines: 1 invalid, 0 oversized; duplicates dropped: 0; rewrites detected: 0',
     'Deferred to next refresh (byte budget): 1 file(s)',

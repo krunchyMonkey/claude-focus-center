@@ -5,12 +5,12 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 ## Current checkpoint
 
 - Date: 2026-10-26
-- Current milestone: **M0 — Foundation**
-- Last verified issue: **13-privacy-controls** (GitHub #13)
-- Next ready issue: **14-acceptance-qa** (all dependencies 01–13 verified)
+- Current milestone: **M2 — complete except the human pilot (issue 14 partial)**
+- Last verified issue: **13-privacy-controls** (GitHub #13); **14-acceptance-qa is Partial** (all automated acceptance verified; human pilot not done)
+- Next action: **owner pilot** (README "Pilot checklist") and owner decision on pushing `feat/mvp` / opening a draft PR
 - Current branch / commit: **`feat/mvp`** (local only; not pushed, no draft PR — awaiting owner approval)
-- Last executed verification: `npm run typecheck` + `npm test` (180/180 unit, 20/20 extension-host on VS Code 1.100.0)
-- Known blockers: none for M0. See "Environment notes" for platform differences and doc gaps.
+- Last executed verification (clean `npm ci`): `npm run typecheck`; `npm test` = 182/182 unit + 20/20 extension-host + gold-path acceptance 7/7 → restart → 5/5; `npm run test:vsix` 1/1 (VS Code 1.100.0)
+- Known blockers: none technical. Pilot needs the owner; pushing/PR needs the owner's approval (public repo). Dev-only audit advisory in `@vscode/vsce` → `@azure/msal-node` (see issue 14 checkpoint).
 
 ## Environment notes (probed 2026-10-26)
 
@@ -39,7 +39,7 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 | 11-triage-controls | Verified (automated) | 165/165 unit (restart, expiry, supersede, reopen); 15/15 host (snooze auto-expiry, resolve persisted, fresh prompt reopens) | `feat/mvp` (local) |
 | 12-catch-me-up | Verified (automated) | 172/172 unit (no invented changes incl. after replay; restart; trimming disclosed); 16/16 host | `feat/mvp` (local) |
 | 13-privacy-controls | Verified (automated) | 180/180 unit (scope, purge, delete, hook skips, static no-network); 20/20 host (drop + purge, pause, delete, network trap) | `feat/mvp` (local) |
-| 14-acceptance-qa | Not started | — | — |
+| 14-acceptance-qa | **Partial** | Gold-path acceptance across a real restart, latency, replay, malformed data, network trap, VSIX package + isolated install smoke all pass; **human pilot not done** | `feat/mvp` (local) |
 
 ## Checkpoints
 
@@ -219,6 +219,18 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 - Next ready issue: 14-acceptance-qa.
 - Decision or permission needed: none.
 
+### 2026-10-26 — Issue 14 / Acceptance QA and VSIX pilot
+- Status: **Partial** — every automated acceptance check passes; the human pilot on real Claude Code sessions (and the real `claude --resume`) has not happened.
+- Branch / commit / draft PR: `feat/mvp`, commit "test(14): gold-path acceptance across restart, VSIX packaging and smoke test…"; not pushed.
+- Changed: `src/test/acceptance/` (gold-path fixture: 4 projects with real temp folders, 10 sessions, one malformed transcript, hook payloads; phase 1 and phase 2 suites), `src/test/runAcceptance.ts` (two VS Code launches on the same user-data dir and Claude folder = real restart), `src/test/harness.ts` (shared runner, `runNode`, `waitUntil`, network trap; proven to catch a call by `networkTrap.test.ts`), `src/test/runVsixSmoke.ts` + `src/test/vsix/smoke.ts` (installs the VSIX into a temp extensions folder with the test VS Code's CLI and activates the installed copy via a probe extension), cumulative "Skipped since start" invalid-line count in Diagnostics, scripts `test:acceptance`, `package`, `test:vsix`, devDependency `@vscode/vsce` 4.0.0 (pinned; released 2026-09-14), `.vscodeignore`, README (test commands, supported platforms and known limitations, pilot checklist).
+- Checks actually run (command + result), after `rm -rf out node_modules && npm ci`:
+  - `npm run typecheck` → 0 errors.
+  - `npm test` → unit 182/182 (Needs You precision 100% 7/7, recall 100%); host 20/20 (hook latency 291 ms); acceptance phase 1 7/7: 10 sessions / 4 projects give dashboard {Needs You 2, In Progress 2, Waiting 1 (snoozed), Uncertain 1, Resolved 3} = the spec's gold-path mix; every item has source evidence; no non-task item resolved without an answer; PROJ-9 workstream groups two repos and flags the conflict; mid-turn question ignored; malformed lines counted, no crash; live permission prompt → sidebar in 292 ms without reload; details document; resume via fake `fake claude.cmd` started in the session's real cwd with `--resume <id>`; acknowledge; Catch Me Up + Mark Caught Up; no extension network calls. Phase 2 (fresh VS Code process): acknowledgement, snooze and checkpoint restored; dashboard identical; 0 bytes reread for 10 unchanged transcripts; replaying all hook payloads adds no items; Catch Me Up empty, then shows only a new StopFailure; no network calls.
+  - `npm run test:vsix` → packaged `focus-center.vsix` (50 files, ~89 KB: `out/**` and media only, no sources, tests, maps or transcripts); installed into a temp `--extensions-dir`; the installed copy (path under that folder) activated, registered commands, discovered 10 synthetic sessions, Diagnostics shows version 0.0.1 and no network egress.
+- Dev-only advisory: `npm audit` reports 2 high (GHSA-xcx6-jx8p-x3h5) in `@azure/msal-node` via `@vscode/vsce` → `@azure/identity`; `npm audit fix` cannot resolve it (needs a major bump). It is only used for marketplace sign-in (`vsce publish`), which this project does not run, and it is not shipped in the VSIX. Not overridden.
+- Still unverified (owner pilot): real Claude Code transcripts and hooks on this machine; real `claude --resume`; visual look, high contrast, secondary side bar and screen reader; macOS/Linux; CI `build` job (branch not pushed).
+- Next action: owner runs the README "Pilot checklist"; owner decides on push / draft PR.
+
 ## Checkpoint template (copy for each completed issue)
 
 ```markdown
@@ -235,11 +247,11 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 
 ## Release gates
 
-- [ ] VS Code Extension Development Host launches with Focus Center view.
-- [ ] Local multi-repo session discovery works without real transcript fixtures committed.
-- [ ] Opt-in hooks are reversible and non-blocking.
-- [ ] Needs You evidence is accurate; `Stop` is not treated as completion.
-- [ ] All triage actions and Catch Me Up survive extension restart.
-- [ ] VSIX installation, privacy cleanup, and synthetic acceptance suite pass.
+- [x] VS Code Extension Development Host launches with Focus Center view. — `npm run test:host` (VS Code 1.100.0); visual check by a person still pending.
+- [x] Local multi-repo session discovery works without real transcript fixtures committed. — synthetic fixtures generated at test time; `*.jsonl` git-ignored; 10 sessions / 4 repos in host and acceptance runs.
+- [x] Opt-in hooks are reversible and non-blocking. — byte-identical install/uninstall round trip, async exec-form hooks, hook exits 0 with no output (unit tests); not yet enabled against a real Claude Code.
+- [ ] Needs You evidence is accurate; `Stop` is not treated as completion. — verified on 20 curated synthetic scenarios + gold path (Stop never resolves); **real-session precision unmeasured until the pilot**.
+- [x] All triage actions and Catch Me Up survive extension restart. — acceptance phase 2 in a fresh VS Code process.
+- [x] VSIX installation, privacy cleanup, and synthetic acceptance suite pass. — `npm run test:vsix` (isolated install), privacy unit + host tests, `npm run test:acceptance`.
 
 Do not mark any release gate complete without recording how it was verified.

@@ -4,7 +4,7 @@
 
 A planned local-first VS Code extension that turns activity across multiple Claude Code sessions, repositories, and worktrees into a concise attention queue.
 
-> **Project status (2026-10-26):** implementation-ready specification and Claude Code handoff in the public [GitHub repository](https://github.com/krunchyMonkey/claude-focus-center). Implementation is in progress on the `feat/mvp` branch; the Focus Center view with Refresh/Diagnostics and read-only local session discovery builds and passes its tests. See [planning/PROGRESS.md](planning/PROGRESS.md).
+> **Project status (2026-10-26):** implementation-ready specification and Claude Code handoff in the public [GitHub repository](https://github.com/krunchyMonkey/claude-focus-center). The v0.1 MVP is implemented on the `feat/mvp` branch, and its automated unit, extension-host, gold-path acceptance (across a restart) and VSIX install tests pass. It has **not** been piloted on real Claude Code sessions yet. See [planning/PROGRESS.md](planning/PROGRESS.md).
 
 ## The problem
 
@@ -51,15 +51,20 @@ Claude Code can operate across many concurrent conversations. As work moves betw
 Requirements: Node.js 20+ and npm; VS Code 1.100 or later. No API key, model or network service is needed at runtime.
 
 ```bash
-npm install              # dev dependencies only (TypeScript, VS Code test runner)
+npm install              # dev dependencies only (TypeScript, VS Code test runner, vsce)
 npm run compile          # TypeScript -> out/
 npm run typecheck        # tsc --noEmit
-npm run test:unit        # pure-logic tests with node:test
+npm run test:unit        # pure-logic tests with node:test (includes 20 curated attention scenarios)
 npm run test:host        # Extension Development Host tests
-npm test                 # both
+npm run test:acceptance  # gold-path daily workflow across two VS Code launches (restart)
+npm test                 # unit + host + acceptance
+npm run package          # builds focus-center.vsix (no runtime dependencies)
+npm run test:vsix        # packages, installs into an isolated folder, smoke-tests the installed copy
 ```
 
-`npm run test:host` downloads VS Code 1.100.0 (the supported minimum) into `.vscode-test/` on first run. To use an installed VS Code instead, set `FOCUS_CENTER_VSCODE_EXE` to its executable path (VS Code must not be mid-update). The runner clears `ELECTRON_RUN_AS_NODE` so it also works from a VS Code integrated terminal.
+To install the package in your own VS Code: `code --install-extension focus-center.vsix`. The test scripts never install into your profile; they use temporary user-data and extension folders.
+
+The host, acceptance and VSIX tests download VS Code 1.100.0 (the supported minimum) into `.vscode-test/` on first run. To use an installed VS Code instead, set `FOCUS_CENTER_VSCODE_EXE` to its executable path (VS Code must not be mid-update). The runner clears `ELECTRON_RUN_AS_NODE` so it also works from a VS Code integrated terminal.
 
 **Try it:** open this folder in VS Code and press <kbd>F5</kbd> ("Run Extension"). In the Extension Development Host, open the **Focus Center** activity-bar icon. The Attention Queue groups items as **Needs You** (always shown; it says so when empty), **In Progress**, **Waiting**, **Uncertain** and **Resolved** (collapsed), then by workstream. Each item shows its repo, age, whether its evidence is *direct* or *inferred*, and an evidence count. Hover an item for why it is there, the next step and its source session. The view badge counts Needs You items. **All sessions** (collapsed) lists every discovered session. The view is a native tree: it works with the keyboard and high-contrast themes, and you can drag it to the secondary side bar. Refresh and Show Diagnostics are on the view toolbar and in the Command Palette under "Focus Center".
 
@@ -93,6 +98,24 @@ Hooks are **off by default**. **Focus Center: Enable Claude Hooks…** (Command 
 Existing settings and other hooks are kept. If the settings file is not valid JSON, or changes while it is being updated, nothing is written. **Focus Center: Disable Claude Hooks…** removes only entries whose arguments reference `claude-focus-center-hook.js`. Node.js must be on `PATH`, or set `focusCenter.hooks.nodePath`.
 
 Each hook run writes one small JSON file into Focus Center's `spool/` folder (written to a temp name, then renamed) and exits 0 with no output. It keeps only the event name, session ID, cwd, transcript path and a few minimal fields: tool name, notification type, task ID and subject, error type, and short redacted excerpts of notification messages, failing commands' first lines and Claude's last message. Tool inputs and prompts are never written. The extension watches the spool, falling back to a rescan every 2.5 s, and drops duplicate deliveries. Spool files are deleted after 7 days.
+
+## Supported platforms and known limitations
+
+- **Platforms:** VS Code 1.100+ desktop. Developed and tested on Windows 11. macOS and Linux are expected to work (no platform-specific code beyond path handling and the Windows `.cmd` launcher) but have not been tested yet.
+- **Claude Code formats:** session transcripts are not a public contract. Discovery and parsing assume `~/.claude/projects/<encoded cwd>/<session id>.jsonl` with `cwd`/`gitBranch` fields, and tolerate anything else as unknown. Hook names and fields were checked against the official hooks reference on 2026-10-26.
+- **Attention rules** are deliberately conservative and English-only. Precision is measured on synthetic scenarios, not yet on real sessions. Text asks are only recognised in the last two sentences of Claude's message. With parallel tool calls, a pending permission can look answered when a sibling tool's result lands (it moves to Resolved; it is never hidden).
+- **Resume** starts `claude --resume <id>` in a new terminal; it does not focus a terminal where the session is already running.
+- **No runtime "is Claude running" signal yet:** In Progress means unfinished work, not a live process. The optional `claude agents --json` probe from the architecture doc is not implemented.
+- **Stale window:** asks older than 7 days are not raised; this is not configurable yet.
+
+## Pilot checklist
+
+1. `npm run package`, then `code --install-extension focus-center.vsix` (or press F5 from this folder).
+2. Open **Focus Center** and run **Show Diagnostics**: check the session root, the monitored projects and that coverage is reported honestly.
+3. Optionally set `focusCenter.excludedPaths` / `includedPaths`, and enable hooks (**Enable Claude Hooks…**, after reading the confirmation).
+4. Use Claude Code for a day. Record each Needs You item that was wrong (false positive) or missing (false negative), and time-to-next-action in the morning.
+5. Try resume, acknowledge, snooze, resolve and Catch Me Up, then restart VS Code and check that everything persisted.
+6. To finish: **Disable Claude Hooks…**, **Delete Focus Center Data…**, uninstall the extension.
 
 ## Documents
 

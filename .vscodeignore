@@ -9,3 +9,4 @@ planning/**
 scripts/**
 tsconfig.json
 CLAUDE.md
+.gitignore

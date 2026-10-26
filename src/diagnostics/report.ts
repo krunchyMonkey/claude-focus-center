@@ -106,7 +106,7 @@ export function discoverySection(result: DiscoveryResult | undefined): Diagnosti
 }
 
 /** Incremental transcript reading: counts only. */
-export function ingestionSection(totalEvents: number, last: PollStats | undefined): DiagnosticsSection {
+export function ingestionSection(totalEvents: number, last: PollStats | undefined, totalSkipped = 0): DiagnosticsSection {
   if (!last) {
     return { title: 'Transcript ingestion', lines: ['not run yet'] };
   }
@@ -114,6 +114,7 @@ export function ingestionSection(totalEvents: number, last: PollStats | undefine
     title: 'Transcript ingestion',
     lines: [
       `Events ingested since start: ${totalEvents}`,
+      `Skipped since start: ${totalSkipped} invalid line(s)`,
       `Last refresh: ${last.filesRead} file(s) read, ${last.filesUnchanged} unchanged (not reread), ${last.bytesRead} bytes`,
       `Skipped lines: ${last.invalidLines} invalid, ${last.oversizedLines} oversized; duplicates dropped: ${last.duplicatesDropped}; rewrites detected: ${last.resets}`,
       ...(last.deferred > 0 ? [`Deferred to next refresh (byte budget): ${last.deferred} file(s)`] : []),
