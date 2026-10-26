@@ -6,7 +6,7 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { FocusCenterApi } from '../../extension';
-import { SYNTHETIC_REPOS, SYNTHETIC_SETTINGS, tenSessions } from '../fixtures/sessions';
+import { SYNTHETIC_REPOS, SYNTHETIC_SETTINGS, tenSessions, writeSessions } from '../fixtures/sessions';
 
 const EXTENSION_ID = 'krunchymonkey.claude-focus-center';
 
@@ -140,9 +140,67 @@ const tests: Array<[string, () => Promise<void>]> = [
       await setExcluded([]);
     }
   }],
+  ['clicking an item opens a read-only details document with evidence and source', async () => {
+    const api = await activate();
+    const item = Object.values(api.getState().items).find((i) => i.sourceSessionIds.includes('host-sess-1'));
+    assert.ok(item, 'permission item from the hook test');
+    const node = api.getRootNodes().flatMap((r) => r.children ?? []).flatMap((w) => w.children ?? []).find((n) => n.itemId === item.id);
+    assert.equal(node?.commandId, 'focusCenter.showDetails');
+    await vscode.commands.executeCommand('focusCenter.showDetails', node);
+    const doc = vscode.workspace.textDocuments.find((d) => d.uri.scheme === 'focus-center' && d.uri.path.includes(encodeURIComponent(item.id)));
+    assert.ok(doc, 'details document opened');
+    assert.equal(doc.languageId, 'markdown');
+    const text = doc.getText();
+    for (const heading of ['# Permission needed: Bash', '## Why this is here', '## What changed', '## Source session', '## Next step']) {
+      assert.ok(text.includes(heading), heading);
+    }
+  }],
+  ['resume refuses unknown sessions and deleted working directories', async () => {
+    await activate();
+    const unknown = await vscode.commands.executeCommand<{ launched: boolean; reason?: string }>('focusCenter.resumeSession', 'not-a-known-session');
+    assert.deepEqual(unknown, { launched: false, reason: 'unknown-session' });
+    // Fixture cwds are synthetic paths that do not exist on disk.
+    const missing = await vscode.commands.executeCommand<{ launched: boolean; reason?: string }>('focusCenter.resumeSession', tenSessions()[0].sessionId);
+    assert.deepEqual(missing, { launched: false, reason: 'cwd-missing' });
+  }],
+  ['resume launches the CLI in the session cwd with --resume <id> and no shell string', async () => {
+    const api = await activate();
+    const root = String(process.env.CLAUDE_CONFIG_DIR);
+    const project = path.join(root, 'real-project');
+    await fs.mkdir(project, { recursive: true });
+    const id = '00000000-0000-4000-8000-0000000000aa';
+    await writeSessions(path.join(root, 'projects'), [{ sessionId: id, cwd: project, gitBranch: 'main', mtime: Math.floor(Date.now() / 1000) }]);
+    await vscode.commands.executeCommand('focusCenter.refresh');
+    assert.equal(api.getState().sessions[id]?.cwd, project);
+
+    // Fake CLI that records where and how it was started.
+    const out = path.join(root, 'fake-claude-out.txt');
+    const fake = path.join(root, process.platform === 'win32' ? 'fake claude.cmd' : 'fake-claude.sh');
+    await fs.writeFile(fake, process.platform === 'win32'
+      ? `@echo off\r\necho %CD%> "${out}"\r\necho %*>> "${out}"\r\n`
+      : `#!/bin/sh\npwd > "${out}"\necho "$@" >> "${out}"\n`);
+    await fs.chmod(fake, 0o755);
+    await vscode.workspace.getConfiguration('focusCenter').update('claudePath', fake, vscode.ConfigurationTarget.Global);
+    try {
+      const outcome = await vscode.commands.executeCommand<{ launched: boolean; cwd?: string }>('focusCenter.resumeSession', id);
+      assert.equal(outcome.launched, true);
+      assert.equal(outcome.cwd, project);
+      let text = '';
+      for (let i = 0; i < 100 && !text.includes('--resume'); i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        text = await fs.readFile(out, 'utf8').catch(() => '');
+      }
+      const [cwdLine, argsLine] = text.trim().split(/\r?\n/);
+      assert.equal(path.resolve(cwdLine.trim()).toLowerCase(), path.resolve(project).toLowerCase());
+      assert.equal(argsLine.trim(), `--resume ${id}`);
+    } finally {
+      await vscode.workspace.getConfiguration('focusCenter').update('claudePath', undefined, vscode.ConfigurationTarget.Global);
+      vscode.window.terminals.forEach((t) => t.dispose());
+    }
+  }],
   ['Refresh and Diagnostics work when no sessions are visible', async () => {
     const api = await activate();
-    await setExcluded(Object.values(SYNTHETIC_REPOS));
+    await setExcluded([...Object.values(SYNTHETIC_REPOS), path.join(String(process.env.CLAUDE_CONFIG_DIR), 'real-project')]);
     try {
       await vscode.commands.executeCommand('focusCenter.refresh');
       assert.equal(api.getRootNodes().find((r) => r.id === 'group:sessions'), undefined);

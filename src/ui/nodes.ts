@@ -21,6 +21,8 @@ export interface FocusNode {
   /** Drives context menus, e.g. `item.needs-you`, `session`. */
   contextValue?: string;
   collapsed?: boolean;
+  /** Command run when the node is clicked or activated with Enter; receives the node. */
+  commandId?: string;
   /** Present on item and session nodes, for commands. */
   itemId?: string;
   sessionId?: string;
@@ -155,6 +157,7 @@ function itemNode(state: FocusState, item: AttentionItem, status: AttentionStatu
     icon: KIND_ICON[item.kind],
     iconColor: status === 'needs-you' ? (item.priority === 0 ? 'problemsErrorIcon.foreground' : 'problemsWarningIcon.foreground') : undefined,
     contextValue: `item.${status}${item.acknowledgedAt ? '.ack' : ''}`,
+    commandId: 'focusCenter.showDetails',
   };
 }
 

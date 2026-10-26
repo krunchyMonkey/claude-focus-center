@@ -75,6 +75,18 @@
         "command": "focusCenter.unlinkSession",
         "title": "Restore Automatic Grouping…",
         "category": "Focus Center"
+      },
+      {
+        "command": "focusCenter.showDetails",
+        "title": "Show Details",
+        "category": "Focus Center",
+        "icon": "$(info)"
+      },
+      {
+        "command": "focusCenter.resumeSession",
+        "title": "Resume Session in Terminal",
+        "category": "Focus Center",
+        "icon": "$(terminal)"
       }
     ],
     "menus": {
@@ -101,6 +113,21 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "focusCenter.resumeSession",
+          "when": "view == focusCenter.queue && viewItem =~ /^(item|session)/",
+          "group": "inline@1"
+        },
+        {
+          "command": "focusCenter.resumeSession",
+          "when": "view == focusCenter.queue && viewItem =~ /^(item|session)/",
+          "group": "1_session@1"
+        },
+        {
+          "command": "focusCenter.showDetails",
+          "when": "view == focusCenter.queue && viewItem =~ /^(item|session)/",
+          "group": "1_session@2"
+        },
         {
           "command": "focusCenter.linkSession",
           "when": "view == focusCenter.queue && viewItem =~ /^(item|session)/",
@@ -130,6 +157,12 @@
           "default": "",
           "scope": "application",
           "markdownDescription": "Absolute path to the Node.js executable that Claude Code should use to run Focus Center hooks. Leave empty to use the first `node` on `PATH`. Only used when you run **Focus Center: Enable Claude Hooks**."
+        },
+        "focusCenter.claudePath": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "markdownDescription": "Absolute path to the Claude Code CLI used by **Resume Session**. Leave empty to use the first `claude` on `PATH`."
         }
       }
     }

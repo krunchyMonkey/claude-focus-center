@@ -26,6 +26,7 @@ import { JsonFileStore } from './storage/jsonStore';
 import { StateService } from './storage/stateService';
 import { FocusTreeProvider } from './ui/focusTreeProvider';
 import { registerHookCommands } from './ui/hookCommands';
+import { DETAILS_SCHEME, DetailsProvider, registerSessionCommands } from './ui/sessionCommands';
 import { registerWorkstreamCommands } from './ui/workstreamCommands';
 import { buildAttentionNodes, FocusNode, needsYouCount } from './ui/nodes';
 
@@ -63,6 +64,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
   }
 
   const tree = new FocusTreeProvider();
+  const details = new DetailsProvider(stateService);
   const view = vscode.window.createTreeView(VIEW_ID, { treeDataProvider: tree, showCollapseAll: true });
   let lastDiscovery: DiscoveryResult | undefined;
   const tailer = new TranscriptTailer({}, stateService.state.cursors);
@@ -76,6 +78,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
   const render = (): void => {
     const now = new Date();
     tree.setRoots(buildAttentionNodes(stateService.state, lastDiscovery, now));
+    details.refresh();
     const count = needsYouCount(stateService.state, now);
     view.badge = count > 0 ? { value: count, tooltip: `${count} item${count === 1 ? '' : 's'} need${count === 1 ? 's' : ''} you` } : undefined;
     view.description = count > 0 ? `${count} need${count === 1 ? 's' : ''} you` : undefined;
@@ -195,6 +198,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
     }),
     ...registerHookCommands(context, () => void refresh()),
     ...registerWorkstreamCommands(stateService, () => void refresh()),
+    details,
+    vscode.workspace.registerTextDocumentContentProvider(DETAILS_SCHEME, details),
+    ...registerSessionCommands(stateService),
     // Transcripts are also re-read periodically, so sessions without hooks still update.
     disposableInterval(() => void refresh(), 60_000),
     { dispose: () => clearTimeout(hookRefreshTimer) },

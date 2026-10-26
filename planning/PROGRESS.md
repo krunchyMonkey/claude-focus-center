@@ -6,10 +6,10 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 
 - Date: 2026-10-26
 - Current milestone: **M0 — Foundation**
-- Last verified issue: **09-sidebar** (GitHub #9)
-- Next ready issue: **10-resume-details** (also ready: 11-triage-controls, 13-privacy-controls)
+- Last verified issue: **10-resume-details** (GitHub #10)
+- Next ready issue: **11-triage-controls** (also ready: 13-privacy-controls)
 - Current branch / commit: **`feat/mvp`** (local only; not pushed, no draft PR — awaiting owner approval)
-- Last executed verification: `npm run typecheck` + `npm test` (149/149 unit, 11/11 extension-host on VS Code 1.100.0)
+- Last executed verification: `npm run typecheck` + `npm test` (157/157 unit, 14/14 extension-host on VS Code 1.100.0)
 - Known blockers: none for M0. See "Environment notes" for platform differences and doc gaps.
 
 ## Environment notes (probed 2026-10-26)
@@ -35,7 +35,7 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 | 07-attention-rules | Verified | 20 curated scenarios; Needs You precision 100% (7/7), recall 100%; order- and replay-invariant; host: hook → Needs You item | `feat/mvp` (local) |
 | 08-workstream-grouping | Verified | 143/143 unit (same ticket merges, same-name repos separate, manual link survives re-import, conflicts kept); 11/11 host | `feat/mvp` (local) |
 | 09-sidebar | Verified (automated) | 149/149 unit; 11/11 host: hook → Needs You node + badge with no refresh | `feat/mvp` (local) |
-| 10-resume-details | Not started | — | — |
+| 10-resume-details | Verified (automated) | 157/157 unit; 14/14 host: details doc opens; fake `claude.cmd` (path with a space) started in the session cwd with `--resume <id>`; unknown session / missing cwd refused | `feat/mvp` (local) |
 | 11-triage-controls | Not started | — | — |
 | 12-catch-me-up | Not started | — | — |
 | 13-privacy-controls | Not started | — | — |
@@ -167,6 +167,18 @@ This file is the durable handoff between Claude Code sessions. Record **verified
   - `npm run test:host` → 11/11. With synthetic sessions only: roots = Needs You (explicitly empty) + All sessions (10), no badge. After a real hook process's PermissionRequest: the item is in Needs You and the badge is 1 with no manual refresh (266 ms).
 - Not verified: visual appearance, high-contrast rendering and dragging the view to the secondary side bar by hand (native TreeView, which VS Code supports; no custom rendering); screen-reader output.
 - Next ready issue: 10-resume-details.
+- Decision or permission needed: none.
+
+### 2026-10-26 — Issue 10 / Evidence details and resume
+- Status: Verified by automated checks with a fake CLI. The real `claude` CLI is not on PATH in this environment, so a real resume was not run.
+- Branch / commit / draft PR: `feat/mvp`, commit "feat(10): evidence details and safe session resume…"; not pushed.
+- Changed: `src/adapters/claudeCli/resume.ts` (`planResume`: strict session-ID charset, which also blocks option injection such as `-rf` or `--dangerously-skip-permissions`; cwd must exist as a directory; CLI from `focusCenter.claudePath` or an absolute PATH entry; missing-transcript warning; CLI as the terminal process with `['--resume', id]`; Windows `.cmd`/`.bat` shims via `cmd.exe /d /s /c ""<cli>" --resume <id>"` with cmd metacharacters in the path refused), `src/ui/details.ts` (pure Markdown: why / what changed / source session / next step, escaped), `src/ui/sessionCommands.ts` (read-only `focus-center:` virtual documents that re-render on state change; Show Details and Resume Session commands returning outcomes for tests; copyable command on failure), tree items open details on click/Enter, inline + context-menu resume for items and sessions, `focusCenter.claudePath` setting, README.
+- Checks actually run (command + result):
+  - `npm run typecheck` → no errors.
+  - `npm run test:unit` → 157 pass, 0 fail (8 unsafe IDs refused; unknown/deleted/non-directory cwd; missing, relative or nonexistent CLI; configured path wins; transcript warning; Windows cmd command line and refusal of `a&b`; PATH search; details content and escaping).
+  - `npm run test:host` → 14/14. Clicking the hook-created item opens a `focus-center:` Markdown document with all five sections. Resume of an unknown session → `unknown-session`; of a fixture session whose cwd does not exist → `cwd-missing` (no terminal). Resume of a new session with a real temp cwd, using a fake CLI `fake claude.cmd` (note the space) → terminal started; the fake recorded cwd = the session cwd and args = `--resume <id>`.
+- What is still unverified: real `claude --resume` (CLI not installed on PATH here); macOS/Linux terminal launch; the modal "Resume Anyway" path by hand.
+- Next ready issue: 11-triage-controls.
 - Decision or permission needed: none.
 
 ## Checkpoint template (copy for each completed issue)
