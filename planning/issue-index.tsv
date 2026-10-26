@@ -1,0 +1,17 @@
+slug	title	milestone	dependencies
+01-extension-scaffold	Scaffold VS Code extension and native Focus Center view	M0	None
+02-session-discovery	Discover local Claude Code sessions across repositories	M0	01
+03-incremental-reader	Incremental JSONL reader	M0	02
+04-hook-config	Safe optional hooks	M1	01
+05-event-ingestion	Nonblocking hook event ingestion	M1	04
+06-state-model	Persist evidence-backed state	M1	01
+07-attention-rules	Attention classification	M1	03,05,06
+08-workstream-grouping	Cross-session grouping	M2	02,06
+09-sidebar	Native focus queue sidebar	M1	01,06,07
+10-resume-details	Evidence and resume session	M2	02,09
+11-triage-controls	Triage controls	M2	06,09
+12-catch-me-up	Catch Me Up recap	M2	06,07,11
+13-privacy-controls	Privacy and diagnostics	M2	03,04,06
+14-acceptance-qa	Pilot acceptance testing	M2	01-13
+15-model-classification	Optional model classification spike	Post-MVP	07,13
+16-remote-integrations	Optional external integration spike	Post-MVP	14
