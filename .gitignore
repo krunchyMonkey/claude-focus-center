@@ -1,0 +1,14 @@
+node_modules/
+dist/
+out/
+coverage/
+.vscode-test/
+*.vsix
+*.log
+.env
+.env.*
+!.env.example
+*.jsonl
+focus-center-data/
+.claude-session-cache/
+.DS_Store
