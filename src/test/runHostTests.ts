@@ -26,7 +26,8 @@ async function main(): Promise<void> {
       ...(executable
         ? { vscodeExecutablePath: executable }
         : { version: process.env.FOCUS_CENTER_VSCODE_VERSION ?? '1.100.0' }),
-      launchArgs: ['--disable-extensions', '--skip-welcome', '--skip-release-notes'],
+      // Fresh user data (and so fresh global storage / hook spool) on every run.
+      launchArgs: ['--disable-extensions', '--skip-welcome', '--skip-release-notes', `--user-data-dir=${path.join(claudeConfigDir, 'vscode-user-data')}`],
     });
   } catch (err) {
     console.error('Extension host tests failed:', err);

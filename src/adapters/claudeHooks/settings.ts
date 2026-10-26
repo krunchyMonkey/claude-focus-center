@@ -27,6 +27,8 @@ export interface HookCommand {
   nodePath: string;
   /** Absolute path to the installed hook script. */
   scriptPath: string;
+  /** Absolute path of the spool directory the hook writes to. */
+  spoolDir: string;
 }
 
 export class UnexpectedSettingsError extends Error {
@@ -37,7 +39,7 @@ type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type Settings = { [key: string]: Json };
 
 export function ourHandler(cmd: HookCommand, event: HookEvent): { [key: string]: Json } {
-  return { type: 'command', command: cmd.nodePath, args: [cmd.scriptPath, event], async: true };
+  return { type: 'command', command: cmd.nodePath, args: [cmd.scriptPath, event, cmd.spoolDir], async: true };
 }
 
 export function isOwnedHandler(handler: unknown): boolean {

@@ -6,10 +6,10 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 
 - Date: 2026-10-26
 - Current milestone: **M0 — Foundation**
-- Last verified issue: **04-hook-config** (GitHub #4)
-- Next ready issue: **05-event-ingestion** (also dependency-ready: 06-state-model)
+- Last verified issue: **05-event-ingestion** (GitHub #5)
+- Next ready issue: **06-state-model** (then 07-attention-rules, 08-workstream-grouping)
 - Current branch / commit: **`feat/mvp`** (local only; not pushed, no draft PR — awaiting owner approval)
-- Last executed verification: `npm run typecheck` + `npm test` (75/75 unit, 8/8 extension-host on VS Code 1.100.0)
+- Last executed verification: `npm run typecheck` + `npm test` (90/90 unit, 9/9 extension-host on VS Code 1.100.0, run twice back-to-back)
 - Known blockers: none for M0. See "Environment notes" for platform differences and doc gaps.
 
 ## Environment notes (probed 2026-10-26)
@@ -30,7 +30,7 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 | 02-session-discovery | Verified | 25/25 unit; 6/6 host tests with 10 synthetic sessions / 4 repos | `feat/mvp` (local) |
 | 03-incremental-reader | Verified | 56/56 unit; 7/7 host (second Refresh reads 0 bytes) | `feat/mvp` (local) |
 | 04-hook-config | Verified | 75/75 unit (byte-identical install/uninstall); 8/8 host | `feat/mvp` (local) |
-| 05-event-ingestion | Not started | — | — |
+| 05-event-ingestion | Verified | 90/90 unit (real hook script, 12 concurrent writers, replay); 9/9 host, hook→extension 285–303 ms | `feat/mvp` (local) |
 | 06-state-model | Not started | — | — |
 | 07-attention-rules | Not started | — | — |
 | 08-workstream-grouping | Not started | — | — |
@@ -97,6 +97,19 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 - Not verified: the modal Enable/Disable flows by hand; a real Claude Code session executing the hook on Windows (Git Bash vs exec form); the `claude` CLI version gate.
 - Next ready issue: 05-event-ingestion.
 - Decision or permission needed: none — enabling hooks on this machine remains the owner's explicit action.
+
+### 2026-10-26 — Issue 05 / Nonblocking hook event spool and idempotent normalizer
+- Status: Verified (automated, synthetic payloads; no real Claude session drove the hook yet).
+- Branch / commit / draft PR: `feat/mvp`, commit "feat(05): nonblocking hook event spool…"; not pushed.
+- Changed: `src/hook/` is now a dependency-free folder copied on enable: `claude-focus-center-hook.js` (stdin ≤ 1 MB, temp-file + rename into the spool, 10 000-file cap, 5 s safety exit, always exit 0, never prints), `spoolRecord.ts` (sanitiser: per-event minimal fields, id = sha256 of raw stdin), `redact.ts` (moved here; `domain/events/redact.ts` re-exports). Hook args now `[script, event, spoolDir]`. `src/domain/events/hook.ts` (re-validates spool records as untrusted, maps 10 hook events to new `EventKind`s, re-bounds excerpts), `src/adapters/claudeHooks/spool.ts` (each file read once, each event id emitted once, invalid files not retried, 7-day pruning, stale temp cleanup), `spoolWatcher.ts` (fs.watch + 100 ms debounce + 2.5 s rescan, non-overlapping scans), extension wiring, Diagnostics "Hook events" section and hook coverage ("active" only when all 10 events are installed), README.
+- Checks actually run (command + result):
+  - `npm run typecheck` → no errors.
+  - `npm run test:unit` → 90 pass, 0 fail. Includes the compiled hook run via `node` (exec form): exits 0 in < 3 s with empty stdout/stderr; tool input/prompt/task description never written; 12 concurrent hook processes → 12 intact files, 12 unique events, 0 invalid; replayed delivery → 0 new events (1 duplicate dropped); invalid/empty/oversized stdin and an unwritable spool → exit 0, nothing written.
+  - `npm run test:host` twice in a row → 9/9 both times. A real hook process (run by the extension host's executable as Node) produced a `permission-request` event seen by the extension in **285 / 290 / 303 ms** without a manual refresh; replay added nothing.
+- Fixed during verification: host runs shared VS Code user data, so a second run treated the first run's spool file as a replay. The runner now uses a fresh temp `--user-data-dir` per run.
+- What is still unverified: a real Claude Code session executing the hook on Windows (Git Bash) or macOS; real payload shapes beyond the documented fields; dedupe across extension restarts relies on spool files plus in-memory ids (persisted ids arrive with issue 06).
+- Next ready issue: 06-state-model.
+- Decision or permission needed: none.
 
 ## Checkpoint template (copy for each completed issue)
 

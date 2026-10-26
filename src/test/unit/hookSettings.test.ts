@@ -10,7 +10,7 @@ import {
   UnexpectedSettingsError,
 } from '../../adapters/claudeHooks/settings';
 
-const cmd = { nodePath: '/synthetic/bin/node', scriptPath: '/synthetic/storage/hooks/claude-focus-center-hook.js' };
+const cmd = { nodePath: '/synthetic/bin/node', scriptPath: '/synthetic/storage/hooks/claude-focus-center-hook.js', spoolDir: '/synthetic/storage/spool' };
 
 /** Synthetic settings with third-party hooks on events we also use. */
 function thirdParty(): Settings {
@@ -32,7 +32,7 @@ test('install adds one async exec-form handler per event and keeps third-party h
   assert.deepEqual(installedEvents(next).sort(), [...HOOK_EVENTS].sort());
   const hooks = next.hooks as Record<string, Array<{ hooks: unknown[] }>>;
   assert.deepEqual(hooks.Stop[0], thirdParty().hooks && (thirdParty().hooks as Record<string, unknown[]>).Stop[0]);
-  assert.deepEqual(hooks.Stop[1], { hooks: [{ type: 'command', command: cmd.nodePath, args: [cmd.scriptPath, 'Stop'], async: true }] });
+  assert.deepEqual(hooks.Stop[1], { hooks: [{ type: 'command', command: cmd.nodePath, args: [cmd.scriptPath, 'Stop', cmd.spoolDir], async: true }] });
   assert.deepEqual(hooks.PreToolUse, (thirdParty().hooks as Record<string, unknown>).PreToolUse);
   assert.equal(next.model, 'synthetic-model');
 });

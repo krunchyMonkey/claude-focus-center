@@ -8,26 +8,48 @@ export interface NormalizedEvent {
   /** Source UUID when available, otherwise a content hash. */
   sourceEventId: string;
   kind: EventKind;
-  /** Source timestamp when present and valid; arrival time is not a substitute. */
+  /**
+   * When the event happened at the source: the transcript record's timestamp, or the time the hook
+   * ran (hooks fire as the event happens). Never the time Focus Center read it.
+   */
   timestamp?: string;
   cwd?: string;
   gitBranch?: string;
+  transcriptPath?: string;
   /** Message UUID in the transcript, for evidence links. */
   messageUuid?: string;
   /** Subagent (sidechain) traffic, as opposed to the main conversation. */
   sidechain?: boolean;
+  agentId?: string;
   toolName?: string;
   isError?: boolean;
-  /** Short, redacted text; only for kinds where wording matters (assistant text, errors). */
+  /** Hook Notification type, e.g. `permission_prompt`, `idle_prompt`. */
+  notificationType?: string;
+  taskId?: string;
+  /** SessionStart source, SessionEnd reason or StopFailure error type. */
+  reason?: string;
+  /** Short, redacted text; only for kinds where wording matters (assistant text, errors, tasks). */
   excerpt?: string;
 }
 
 export type EventKind =
+  // Transcript records
   | 'user-prompt'
   | 'assistant-text'
   | 'tool-use'
   | 'tool-result'
-  | 'system';
+  | 'system'
+  // Hook events
+  | 'session-start'
+  | 'prompt-submitted'
+  | 'notification'
+  | 'permission-request'
+  | 'tool-failure'
+  | 'task-created'
+  | 'task-completed'
+  | 'stop'
+  | 'stop-failure'
+  | 'session-end';
 
 export function eventId(source: NormalizedEvent['source'], sessionId: string, sourceEventId: string): string {
   return `${source}:${sessionId}:${sourceEventId}`;

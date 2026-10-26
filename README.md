@@ -72,11 +72,13 @@ npm test                 # both
 
 Hooks are **off by default**. **Focus Center: Enable Claude Hooks…** (Command Palette or the view's `…` menu) shows exactly what will change and asks for confirmation. Then it:
 
-- copies the hook script to Focus Center's global storage (a stable path that does not change with extension updates);
+- copies the dependency-free hook script to Focus Center's global storage (a stable path that does not change with extension updates);
 - backs up `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR/settings.json`) into Focus Center's storage under `backups/`;
-- adds one `async` exec-form command hook (`node <script> <Event>`, no shell) for SessionStart, UserPromptSubmit, Notification, PermissionRequest, PostToolUseFailure, TaskCreated, TaskCompleted, Stop, StopFailure and SessionEnd. Async hooks cannot block Claude or approve or deny anything.
+- adds one `async` exec-form command hook (`node <script> <Event> <spool dir>`, no shell) for SessionStart, UserPromptSubmit, Notification, PermissionRequest, PostToolUseFailure, TaskCreated, TaskCompleted, Stop, StopFailure and SessionEnd. Async hooks cannot block Claude or approve or deny anything.
 
-Existing settings and other hooks are kept. If the settings file is not valid JSON, or changes while it is being updated, nothing is written. **Focus Center: Disable Claude Hooks…** removes only entries whose arguments reference `claude-focus-center-hook.js`. Node.js must be on `PATH`, or set `focusCenter.hooks.nodePath`. In this build the hook script only exits; event recording arrives with the event spool.
+Existing settings and other hooks are kept. If the settings file is not valid JSON, or changes while it is being updated, nothing is written. **Focus Center: Disable Claude Hooks…** removes only entries whose arguments reference `claude-focus-center-hook.js`. Node.js must be on `PATH`, or set `focusCenter.hooks.nodePath`.
+
+Each hook run writes one small JSON file into Focus Center's `spool/` folder (written to a temp name, then renamed) and exits 0 with no output. It keeps only the event name, session ID, cwd, transcript path and a few minimal fields: tool name, notification type, task ID and subject, error type, and short redacted excerpts of notification messages, failing commands' first lines and Claude's last message. Tool inputs and prompts are never written. The extension watches the spool, falling back to a rescan every 2.5 s, and drops duplicate deliveries. Spool files are deleted after 7 days.
 
 ## Documents
 

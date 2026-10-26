@@ -19,14 +19,17 @@ const roots: string[] = [];
 async function env() {
   const root = await makeTempRoot('focus-center-hooks-');
   roots.push(root);
-  const scriptSource = path.join(root, 'src-hook.js');
-  await fs.writeFile(scriptSource, '// synthetic hook\n');
+  const hookSourceDir = path.join(root, 'hook-src');
+  await fs.mkdir(hookSourceDir);
+  await fs.writeFile(path.join(hookSourceDir, 'claude-focus-center-hook.js'), '// synthetic hook\n');
+  await fs.writeFile(path.join(hookSourceDir, 'redact.js'), '// synthetic module\n');
+  await fs.writeFile(path.join(hookSourceDir, 'redact.js.map'), '{}');
   return {
     root,
     settingsPath: path.join(root, 'claude', 'settings.json'),
     storageDir: path.join(root, 'storage'),
     nodePath: path.join(root, 'bin', 'node'),
-    scriptSource,
+    hookSourceDir,
   };
 }
 after(async () => {
@@ -65,9 +68,11 @@ test('enable then disable leaves pre-existing settings byte-identical, with back
   assert.deepEqual(on.events.sort(), [...HOOK_EVENTS].sort());
   assert.equal(await fs.readFile(on.backupPath!, 'utf8'), THIRD_PARTY);
   assert.equal(await fs.readFile(installedScriptPath(e.storageDir), 'utf8'), '// synthetic hook\n');
+  assert.deepEqual((await fs.readdir(path.dirname(installedScriptPath(e.storageDir)))).sort(), ['claude-focus-center-hook.js', 'redact.js']);
   const installed = await fs.readFile(e.settingsPath, 'utf8');
   assert.match(installed, /^ {4}"model"/m, 'keeps 4-space indentation');
   assert.match(installed, /\/synthetic\/other-tool\/notify\.sh/);
+  assert.match(installed, /"args": \[\s+".*claude-focus-center-hook\.js",\s+"Stop",\s+".*spool"\s+\]/);
 
   const off = await disableHooks({ ...e, now: new Date('2026-01-01T00:00:01Z') });
   assert.equal(off.removed, HOOK_EVENTS.length);

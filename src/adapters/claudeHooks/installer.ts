@@ -24,6 +24,25 @@ export function installedScriptPath(storageDir: string): string {
   return path.join(storageDir, 'hooks', HOOK_SCRIPT_NAME);
 }
 
+/** Where hooks drop one JSON file per event. */
+export function spoolDirFor(storageDir: string): string {
+  return path.join(storageDir, 'spool');
+}
+
+/** Copies the dependency-free hook folder (the script and its sibling modules) into storage. */
+export async function copyHookScripts(sourceDir: string, storageDir: string): Promise<string> {
+  const target = path.dirname(installedScriptPath(storageDir));
+  await fs.mkdir(target, { recursive: true });
+  const files = (await fs.readdir(sourceDir)).filter((f) => f.endsWith('.js'));
+  if (!files.includes(HOOK_SCRIPT_NAME)) {
+    throw new Error(`Hook script ${HOOK_SCRIPT_NAME} not found in ${sourceDir}`);
+  }
+  for (const file of files) {
+    await fs.copyFile(path.join(sourceDir, file), path.join(target, file));
+  }
+  return installedScriptPath(storageDir);
+}
+
 interface LoadedSettings {
   exists: boolean;
   text?: string;
@@ -66,18 +85,16 @@ export interface EnableOptions {
   settingsPath: string;
   storageDir: string;
   nodePath: string;
-  /** Compiled hook script shipped with the extension. */
-  scriptSource: string;
+  /** Folder with the compiled, dependency-free hook script shipped with the extension. */
+  hookSourceDir: string;
   now?: Date;
 }
 
 export async function enableHooks(options: EnableOptions): Promise<HookChangeResult> {
-  const scriptPath = installedScriptPath(options.storageDir);
-  await fs.mkdir(path.dirname(scriptPath), { recursive: true });
-  await fs.copyFile(options.scriptSource, scriptPath);
+  const scriptPath = await copyHookScripts(options.hookSourceDir, options.storageDir);
 
   const loaded = await loadSettings(options.settingsPath);
-  const cmd: HookCommand = { nodePath: options.nodePath, scriptPath };
+  const cmd: HookCommand = { nodePath: options.nodePath, scriptPath, spoolDir: spoolDirFor(options.storageDir) };
   const next = installHooks(loaded.settings, cmd);
   const result = await writeIfChanged(options.settingsPath, options.storageDir, loaded, next, options.now);
   return { ...result, events: installedEvents(next) };

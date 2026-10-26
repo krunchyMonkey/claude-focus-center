@@ -4,10 +4,19 @@ import * as vscode from 'vscode';
 import { discoverSessions, DiscoveryResult } from './adapters/claudeSessions/discovery';
 import { defaultProjectsRoot } from './adapters/claudeSessions/paths';
 import { PollStats, TranscriptTailer } from './adapters/claudeSessions/tailer';
-import { defaultSettingsPath, hookStatus } from './adapters/claudeHooks/installer';
-import { hookCoverage } from './diagnostics/report';
+import { defaultSettingsPath, hookStatus, spoolDirFor } from './adapters/claudeHooks/installer';
+import { SpoolConsumer } from './adapters/claudeHooks/spool';
+import { SpoolWatcher } from './adapters/claudeHooks/spoolWatcher';
+import {
+  buildDiagnosticsReport,
+  discoveryCoverage,
+  discoverySection,
+  hookCoverage,
+  HookIngestion,
+  hookSection,
+  ingestionSection,
+} from './diagnostics/report';
 import { registerHookCommands } from './ui/hookCommands';
-import { buildDiagnosticsReport, discoveryCoverage, discoverySection, ingestionSection } from './diagnostics/report';
 import { FocusTreeProvider } from './ui/focusTreeProvider';
 import { buildSessionNodes, FocusNode } from './ui/nodes';
 
@@ -18,6 +27,11 @@ export interface FocusCenterApi {
   getRootNodes(): FocusNode[];
   getLastDiscovery(): DiscoveryResult | undefined;
   getIngestion(): { totalEvents: number; lastPoll?: PollStats };
+  getHookIngestion(): HookIngestion;
+  /** Directory hooks write to; tests drive the real hook script against it. */
+  spoolDir: string;
+  /** Scans the hook spool now; resolves when done. */
+  scanHookSpool(): Promise<void>;
 }
 
 export function activate(context: vscode.ExtensionContext): FocusCenterApi {
@@ -28,6 +42,23 @@ export function activate(context: vscode.ExtensionContext): FocusCenterApi {
   // Cursors and seen-event ids are in memory for now; persistence arrives with the state store (issue 06).
   const tailer = new TranscriptTailer();
   const ingestion: { totalEvents: number; lastPoll?: PollStats } = { totalEvents: 0 };
+  const spoolDir = spoolDirFor(context.globalStorageUri.fsPath);
+  const hookIngestion: HookIngestion = { totalEvents: 0, byKind: {} };
+  const spool = new SpoolWatcher(
+    spoolDir,
+    new SpoolConsumer(spoolDir),
+    (events, stats) => {
+      hookIngestion.lastScan = stats;
+      for (const e of events) {
+        hookIngestion.totalEvents++;
+        hookIngestion.byKind[e.kind] = (hookIngestion.byKind[e.kind] ?? 0) + 1;
+        if (e.timestamp && (!hookIngestion.lastEventAt || e.timestamp > hookIngestion.lastEventAt)) {
+          hookIngestion.lastEventAt = e.timestamp;
+        }
+      }
+    },
+    (err) => output.appendLine(`Hook spool scan failed: ${err instanceof Error ? err.message : String(err)}`),
+  );
   let running: Promise<void> | undefined;
   let queued: Promise<void> | undefined;
 
@@ -62,6 +93,7 @@ export function activate(context: vscode.ExtensionContext): FocusCenterApi {
     tree,
     output,
     view,
+    spool,
     vscode.commands.registerCommand('focusCenter.refresh', refresh),
     vscode.commands.registerCommand('focusCenter.showDiagnostics', async () => {
       const hooks = await hookStatus(defaultSettingsPath());
@@ -72,8 +104,12 @@ export function activate(context: vscode.ExtensionContext): FocusCenterApi {
         nodeVersion: process.version,
         storagePath: context.globalStorageUri.fsPath,
         generatedAt: new Date(),
-        coverage: [discoveryCoverage(lastDiscovery), hookCoverage(hooks)],
-        sections: [discoverySection(lastDiscovery), ingestionSection(ingestion.totalEvents, ingestion.lastPoll)],
+        coverage: [discoveryCoverage(lastDiscovery), hookCoverage(hooks, hookIngestion)],
+        sections: [
+          discoverySection(lastDiscovery),
+          ingestionSection(ingestion.totalEvents, ingestion.lastPoll),
+          hookSection(spoolDir, spool.watching, hookIngestion, new Date()),
+        ],
       });
       output.replace(lines.join('\n') + '\n');
       output.show(true);
@@ -88,7 +124,15 @@ export function activate(context: vscode.ExtensionContext): FocusCenterApi {
   );
 
   void refresh();
-  return { getRootNodes: () => tree.getChildren(), getLastDiscovery: () => lastDiscovery, getIngestion: () => ingestion };
+  void spool.start().catch((err) => output.appendLine(`Hook spool unavailable: ${err instanceof Error ? err.message : String(err)}`));
+  return {
+    getRootNodes: () => tree.getChildren(),
+    getLastDiscovery: () => lastDiscovery,
+    getIngestion: () => ingestion,
+    getHookIngestion: () => hookIngestion,
+    spoolDir,
+    scanHookSpool: () => spool.scanNow(),
+  };
 }
 
 export function deactivate(): void {

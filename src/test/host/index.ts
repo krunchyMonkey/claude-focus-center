@@ -1,6 +1,7 @@
 // Runs inside the Extension Development Host with CLAUDE_CONFIG_DIR pointing at ten synthetic
 // sessions (see runHostTests.ts). A tiny sequential harness keeps test dependencies minimal.
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
@@ -60,6 +61,29 @@ const tests: Array<[string, () => Promise<void>]> = [
     assert.match(text, /Events ingested since start: 20/);
     assert.match(text, /0 file\(s\) read, 10 unchanged \(not reread\), 0 bytes/);
   }],
+  ['a hook event reaches the extension within 5 seconds; replay adds nothing', async () => {
+    const api = await activate();
+    const script = path.join(__dirname, '..', '..', 'hook', 'claude-focus-center-hook.js');
+    const input = JSON.stringify({ hook_event_name: 'PermissionRequest', session_id: 'host-sess-1', cwd: '/synthetic/repo', tool_name: 'Bash', tool_input: { command: 'x' } });
+    const before = api.getHookIngestion().totalEvents;
+    const started = Date.now();
+    // The extension host's own executable runs the script as plain Node.
+    assert.equal(await runNode([script, 'PermissionRequest', api.spoolDir], input), 0);
+    // No manual refresh: the watcher (or its rescan fallback) must pick it up.
+    while (api.getHookIngestion().totalEvents === before && Date.now() - started < 5000) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    const latency = Date.now() - started;
+    assert.equal(api.getHookIngestion().totalEvents, before + 1, `no event after ${latency} ms`);
+    console.log(`    hook event latency: ${latency} ms`);
+    assert.equal(api.getHookIngestion().byKind['permission-request'], 1);
+
+    assert.equal(await runNode([script, 'PermissionRequest', api.spoolDir], input), 0);
+    await api.scanHookSpool();
+    assert.equal(api.getHookIngestion().totalEvents, before + 1);
+    const text = (await vscode.commands.executeCommand<string[]>('focusCenter.showDiagnostics')).join('\n');
+    assert.match(text, /Received this run: 1 \(permission-request 1\)/);
+  }],
   ['excludedPaths setting removes a repository on refresh', async () => {
     const api = await activate();
     await setExcluded([SYNTHETIC_REPOS.beta]);
@@ -90,6 +114,14 @@ async function activate(): Promise<FocusCenterApi> {
   const ext = vscode.extensions.getExtension<FocusCenterApi>(EXTENSION_ID);
   assert.ok(ext, `extension ${EXTENSION_ID} not found`);
   return ext.activate();
+}
+
+function runNode(args: string[], input: string): Promise<number | null> {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, args, { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, stdio: ['pipe', 'ignore', 'ignore'] });
+    child.on('exit', resolve);
+    child.stdin.end(input);
+  });
 }
 
 async function setExcluded(paths: string[]): Promise<void> {

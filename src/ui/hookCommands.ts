@@ -6,13 +6,14 @@ import {
   enableHooks,
   findNodeOnPath,
   installedScriptPath,
+  spoolDirFor,
 } from '../adapters/claudeHooks/installer';
 import { HOOK_EVENTS } from '../adapters/claudeHooks/settings';
 
 /** Registers the explicit, user-initiated hook opt-in / opt-out commands. */
 export function registerHookCommands(context: vscode.ExtensionContext, onChanged: () => void): vscode.Disposable[] {
   const storageDir = context.globalStorageUri.fsPath;
-  const scriptSource = context.asAbsolutePath(path.join('out', 'hook', 'claude-focus-center-hook.js'));
+  const hookSourceDir = context.asAbsolutePath(path.join('out', 'hook'));
 
   const enable = async (): Promise<void> => {
     const settingsPath = defaultSettingsPath();
@@ -26,7 +27,7 @@ export function registerHookCommands(context: vscode.ExtensionContext, onChanged
     const detail = [
       `File: ${settingsPath}`,
       `Adds one async command hook for: ${HOOK_EVENTS.join(', ')}.`,
-      `Runs: ${nodePath} ${installedScriptPath(storageDir)} <event>`,
+      `Runs: ${nodePath} ${installedScriptPath(storageDir)} <event> ${spoolDirFor(storageDir)}`,
       'The hook records minimal event metadata locally, never blocks Claude and never approves or denies permissions.',
       `Existing settings and hooks are kept. A backup is saved in ${path.join(storageDir, 'backups')}.`,
       'Disable at any time with "Focus Center: Disable Claude Hooks".',
@@ -36,7 +37,7 @@ export function registerHookCommands(context: vscode.ExtensionContext, onChanged
       return;
     }
     try {
-      const result = await enableHooks({ settingsPath, storageDir, nodePath, scriptSource });
+      const result = await enableHooks({ settingsPath, storageDir, nodePath, hookSourceDir });
       onChanged();
       void vscode.window.showInformationMessage(
         result.changed

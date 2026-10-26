@@ -2,7 +2,9 @@
 import type { DiscoveryResult } from '../adapters/claudeSessions/discovery';
 import type { HookStatus } from '../adapters/claudeHooks/installer';
 import { HOOK_EVENTS } from '../adapters/claudeHooks/settings';
+import type { SpoolScanStats } from '../adapters/claudeHooks/spool';
 import type { PollStats } from '../adapters/claudeSessions/tailer';
+import { formatAge } from '../ui/nodes';
 
 export type CoverageState = 'active' | 'partial' | 'unavailable' | 'not-implemented';
 
@@ -117,8 +119,15 @@ export function ingestionSection(totalEvents: number, last: PollStats | undefine
   };
 }
 
-/** Hook coverage. Installed hooks are only partial coverage until their events are consumed (issue 05). */
-export function hookCoverage(status: HookStatus): CoverageEntry {
+export interface HookIngestion {
+  totalEvents: number;
+  byKind: Record<string, number>;
+  lastEventAt?: string;
+  lastScan?: SpoolScanStats;
+}
+
+/** Hook coverage: active only when every supported event is installed and the spool is readable. */
+export function hookCoverage(status: HookStatus, ingestion: HookIngestion): CoverageEntry {
   const source = 'Claude hooks';
   if (status.error) {
     return { source, state: 'unavailable', detail: status.error };
@@ -127,9 +136,26 @@ export function hookCoverage(status: HookStatus): CoverageEntry {
     return { source, state: 'unavailable', detail: 'not enabled (run "Focus Center: Enable Claude Hooks")' };
   }
   const missing = HOOK_EVENTS.filter((e) => !status.events.includes(e));
+  const received = `${ingestion.totalEvents} event(s) received this run`;
+  if (missing.length > 0) {
+    return { source, state: 'partial', detail: `installed for ${status.events.length} event(s), missing ${missing.join(', ')}; ${received}` };
+  }
+  return { source, state: 'active', detail: `installed for all ${HOOK_EVENTS.length} events; ${received}` };
+}
+
+/** Spool health: counts, last event age and watcher mode. No event content. */
+export function hookSection(spoolDir: string, watching: boolean, ingestion: HookIngestion, now: Date): DiagnosticsSection {
+  const scan = ingestion.lastScan;
+  const kinds = Object.entries(ingestion.byKind).sort(([a], [b]) => a.localeCompare(b)).map(([k, n]) => `${k} ${n}`).join(', ');
   return {
-    source,
-    state: 'partial',
-    detail: `installed for ${status.events.length} event(s)${missing.length ? `, missing ${missing.join(', ')}` : ''}; hook events are not ingested yet`,
+    title: 'Hook events',
+    lines: [
+      `Spool: ${spoolDir} (${scan ? (scan.dirFound ? 'found' : 'not created yet') : 'not scanned yet'}; ${watching ? 'file watcher + 2.5 s rescan' : 'rescan every 2.5 s'})`,
+      `Received this run: ${ingestion.totalEvents}${kinds ? ` (${kinds})` : ''}`,
+      `Last hook event: ${ingestion.lastEventAt ? `${ingestion.lastEventAt} (${formatAge(new Date(ingestion.lastEventAt), now)})` : 'none'}`,
+      ...(scan && (scan.invalid || scan.unknownEvents || scan.duplicatesDropped)
+        ? [`Last scan skipped: ${scan.invalid} invalid, ${scan.unknownEvents} unknown event, ${scan.duplicatesDropped} duplicate`]
+        : []),
+    ],
   };
 }
