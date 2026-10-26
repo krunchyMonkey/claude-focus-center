@@ -14,7 +14,7 @@ export function effectiveStatus(item: AttentionItem, now: Date): AttentionStatus
   return item.status;
 }
 
-/** Newest evidence timestamp: when this item last changed at the source. */
+/** Newest *source* evidence timestamp (user actions excluded): when this item last changed at the source. */
 export function lastEvidenceAt(item: AttentionItem): string | undefined {
-  return item.evidence.reduce<string | undefined>((max, e) => (e.timestamp && (!max || e.timestamp > max) ? e.timestamp : max), undefined);
+  return item.evidence.reduce<string | undefined>((max, e) => (e.kind !== 'user-action' && e.timestamp && (!max || e.timestamp > max) ? e.timestamp : max), undefined);
 }

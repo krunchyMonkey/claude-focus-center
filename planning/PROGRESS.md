@@ -6,10 +6,10 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 
 - Date: 2026-10-26
 - Current milestone: **M0 — Foundation**
-- Last verified issue: **10-resume-details** (GitHub #10)
-- Next ready issue: **11-triage-controls** (also ready: 13-privacy-controls)
+- Last verified issue: **11-triage-controls** (GitHub #11)
+- Next ready issue: **12-catch-me-up** (also ready: 13-privacy-controls)
 - Current branch / commit: **`feat/mvp`** (local only; not pushed, no draft PR — awaiting owner approval)
-- Last executed verification: `npm run typecheck` + `npm test` (157/157 unit, 14/14 extension-host on VS Code 1.100.0)
+- Last executed verification: `npm run typecheck` + `npm test` (165/165 unit, 15/15 extension-host on VS Code 1.100.0)
 - Known blockers: none for M0. See "Environment notes" for platform differences and doc gaps.
 
 ## Environment notes (probed 2026-10-26)
@@ -36,7 +36,7 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 | 08-workstream-grouping | Verified | 143/143 unit (same ticket merges, same-name repos separate, manual link survives re-import, conflicts kept); 11/11 host | `feat/mvp` (local) |
 | 09-sidebar | Verified (automated) | 149/149 unit; 11/11 host: hook → Needs You node + badge with no refresh | `feat/mvp` (local) |
 | 10-resume-details | Verified (automated) | 157/157 unit; 14/14 host: details doc opens; fake `claude.cmd` (path with a space) started in the session cwd with `--resume <id>`; unknown session / missing cwd refused | `feat/mvp` (local) |
-| 11-triage-controls | Not started | — | — |
+| 11-triage-controls | Verified (automated) | 165/165 unit (restart, expiry, supersede, reopen); 15/15 host (snooze auto-expiry, resolve persisted, fresh prompt reopens) | `feat/mvp` (local) |
 | 12-catch-me-up | Not started | — | — |
 | 13-privacy-controls | Not started | — | — |
 | 14-acceptance-qa | Not started | — | — |
@@ -179,6 +179,18 @@ This file is the durable handoff between Claude Code sessions. Record **verified
   - `npm run test:host` → 14/14. Clicking the hook-created item opens a `focus-center:` Markdown document with all five sections. Resume of an unknown session → `unknown-session`; of a fixture session whose cwd does not exist → `cwd-missing` (no terminal). Resume of a new session with a real temp cwd, using a fake CLI `fake claude.cmd` (note the space) → terminal started; the fake recorded cwd = the session cwd and args = `--resume <id>`.
 - What is still unverified: real `claude --resume` (CLI not installed on PATH here); macOS/Linux terminal launch; the modal "Resume Anyway" path by hand.
 - Next ready issue: 11-triage-controls.
+- Decision or permission needed: none.
+
+### 2026-10-26 — Issue 11 / Triage controls
+- Status: Verified (automated). Context-menu and inline buttons were not clicked by hand.
+- Branch / commit / draft PR: `feat/mvp`, commit "feat(11): acknowledge, snooze, resolve and reopen…"; not pushed.
+- Changed: `src/domain/attention/triage.ts` (acknowledge, snooze until a future time, resolve (clears snooze), reopen (clears overrides; an item the rules resolved goes back to Needs You or In Progress for tasks; sets `reopenedAt`); every action adds `user-action` evidence and a journal entry; `nextSnoozeExpiry`, `tomorrowMorning` (09:00 local), `availableActions`), classifier: newer blocking evidence clears an older manual resolution, snooze or acknowledgement; rule timing and displayed age use *source* evidence only, so user actions never move them; `AttentionItem.snoozedAt` / `reopenedAt`. `src/ui/triageCommands.ts` (commands accept a node, an id or a quick pick; snooze quick pick 1 h / 4 h / tomorrow 09:00), status-aware context menus and inline buttons, re-render timer at the next snooze expiry, README.
+- Checks actually run (command + result):
+  - `npm run typecheck` → no errors.
+  - `npm run test:unit` → 165 pass, 0 fail. All four actions with overrides only (rule status kept), journal + user-action evidence, source age unchanged; invalid requests change nothing; acknowledge/snooze survive a store round trip and a replay after "restart"; a re-raised prompt after acknowledge/snooze/resolve returns the item to Needs You; older evidence does not undo a user action; a new permission after an answered one appears as Needs You; reopening a rules-resolved item stays Needs You until *newer* activity answers it.
+  - `npm run test:host` → 15/15. On the hook-created item: acknowledge keeps it in Needs You; a 2 s snooze moves it to Waiting (badge cleared), then it returns to Needs You by itself; resolve moves it to Resolved and `manuallyResolvedAt` + `acknowledgedAt` are in `state.json`; a fresh `permission_prompt` notification from a real hook process puts it back in Needs You with badge 1.
+- Not verified: an actual VS Code restart by hand (restart covered by store round trips); menu placement and look.
+- Next ready issue: 12-catch-me-up.
 - Decision or permission needed: none.
 
 ## Checkpoint template (copy for each completed issue)

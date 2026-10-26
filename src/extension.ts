@@ -27,7 +27,9 @@ import { StateService } from './storage/stateService';
 import { FocusTreeProvider } from './ui/focusTreeProvider';
 import { registerHookCommands } from './ui/hookCommands';
 import { DETAILS_SCHEME, DetailsProvider, registerSessionCommands } from './ui/sessionCommands';
+import { registerTriageCommands } from './ui/triageCommands';
 import { registerWorkstreamCommands } from './ui/workstreamCommands';
+import { nextSnoozeExpiry } from './domain/attention/triage';
 import { buildAttentionNodes, FocusNode, needsYouCount } from './ui/nodes';
 
 export const VIEW_ID = 'focusCenter.queue';
@@ -73,6 +75,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
   const spoolDir = spoolDirFor(storageDir);
   const hookIngestion: HookIngestion = { totalEvents: 0, byKind: {} };
   let hookRefreshTimer: NodeJS.Timeout | undefined;
+  let snoozeTimer: NodeJS.Timeout | undefined;
 
   /** Rebuilds the tree from current state; cheap enough to run after every change. */
   const render = (): void => {
@@ -83,6 +86,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
     view.badge = count > 0 ? { value: count, tooltip: `${count} item${count === 1 ? '' : 's'} need${count === 1 ? 's' : ''} you` } : undefined;
     view.description = count > 0 ? `${count} need${count === 1 ? 's' : ''} you` : undefined;
     view.message = lastDiscovery ? viewMessage(lastDiscovery) : undefined;
+    // Re-render exactly when the next snooze ends, so the item returns without a refresh.
+    clearTimeout(snoozeTimer);
+    const expiry = nextSnoozeExpiry(stateService.state, now);
+    if (expiry) {
+      snoozeTimer = setTimeout(render, Math.min(Math.max(expiry.getTime() - Date.now() + 50, 50), 2 ** 31 - 1));
+    }
   };
 
   /** Single entry point for new events from any source: deduped against everything already applied. */
@@ -201,6 +210,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
     details,
     vscode.workspace.registerTextDocumentContentProvider(DETAILS_SCHEME, details),
     ...registerSessionCommands(stateService),
+    ...registerTriageCommands(stateService, () => render()),
+    { dispose: () => clearTimeout(snoozeTimer) },
     // Transcripts are also re-read periodically, so sessions without hooks still update.
     disposableInterval(() => void refresh(), 60_000),
     { dispose: () => clearTimeout(hookRefreshTimer) },

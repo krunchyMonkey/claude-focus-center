@@ -87,6 +87,30 @@
         "title": "Resume Session in Terminal",
         "category": "Focus Center",
         "icon": "$(terminal)"
+      },
+      {
+        "command": "focusCenter.acknowledge",
+        "title": "Acknowledge",
+        "category": "Focus Center",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "focusCenter.snooze",
+        "title": "Snooze…",
+        "category": "Focus Center",
+        "icon": "$(clock)"
+      },
+      {
+        "command": "focusCenter.resolve",
+        "title": "Mark Resolved",
+        "category": "Focus Center",
+        "icon": "$(check)"
+      },
+      {
+        "command": "focusCenter.reopen",
+        "title": "Reopen",
+        "category": "Focus Center",
+        "icon": "$(debug-restart)"
       }
     ],
     "menus": {
@@ -113,6 +137,41 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "focusCenter.resolve",
+          "when": "view == focusCenter.queue && viewItem =~ /^item\\.(needs-you|uncertain|in-progress)/",
+          "group": "inline@2"
+        },
+        {
+          "command": "focusCenter.snooze",
+          "when": "view == focusCenter.queue && viewItem =~ /^item\\.(needs-you|uncertain|in-progress)/",
+          "group": "inline@3"
+        },
+        {
+          "command": "focusCenter.reopen",
+          "when": "view == focusCenter.queue && viewItem =~ /^item\\.(waiting|resolved)/",
+          "group": "inline@2"
+        },
+        {
+          "command": "focusCenter.acknowledge",
+          "when": "view == focusCenter.queue && viewItem =~ /^item\\.(needs-you|uncertain|in-progress)$/",
+          "group": "0_triage@1"
+        },
+        {
+          "command": "focusCenter.snooze",
+          "when": "view == focusCenter.queue && viewItem =~ /^item\\.(needs-you|uncertain|in-progress)/",
+          "group": "0_triage@2"
+        },
+        {
+          "command": "focusCenter.resolve",
+          "when": "view == focusCenter.queue && viewItem =~ /^item\\.(needs-you|uncertain|in-progress)/",
+          "group": "0_triage@3"
+        },
+        {
+          "command": "focusCenter.reopen",
+          "when": "view == focusCenter.queue && viewItem =~ /^item\\.(waiting|resolved)/",
+          "group": "0_triage@4"
+        },
         {
           "command": "focusCenter.resumeSession",
           "when": "view == focusCenter.queue && viewItem =~ /^(item|session)/",

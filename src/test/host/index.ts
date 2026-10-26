@@ -155,6 +155,38 @@ const tests: Array<[string, () => Promise<void>]> = [
       assert.ok(text.includes(heading), heading);
     }
   }],
+  ['triage: acknowledge, snooze (auto-expiry), resolve persist; a fresh permission event reopens', async () => {
+    const api = await activate();
+    const item = Object.values(api.getState().items).find((i) => i.sourceSessionIds.includes('host-sess-1'))!;
+    const groupOf = () => api.getRootNodes().find((g) => g.children?.some((w) => w.children?.some((n) => n.itemId === item.id)))?.id;
+
+    assert.equal((await vscode.commands.executeCommand<{ ok: boolean }>('focusCenter.acknowledge', item.id)).ok, true);
+    assert.equal(groupOf(), 'group:needs-you');
+
+    const until = new Date(Date.now() + 2000).toISOString();
+    assert.equal((await vscode.commands.executeCommand<{ ok: boolean }>('focusCenter.snooze', { itemId: item.id }, until)).ok, true);
+    assert.equal(groupOf(), 'group:waiting');
+    assert.equal(api.getBadge(), undefined);
+    for (let i = 0; i < 60 && groupOf() !== 'group:needs-you'; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    assert.equal(groupOf(), 'group:needs-you', 'snooze expiry re-renders without a refresh');
+
+    await vscode.commands.executeCommand('focusCenter.resolve', item.id);
+    assert.equal(groupOf(), 'group:resolved');
+    await api.flushState();
+    const saved = JSON.parse(await fs.readFile(api.statePath, 'utf8'));
+    assert.ok(saved.items[item.id].manuallyResolvedAt, 'manual resolution persisted');
+    assert.ok(saved.items[item.id].acknowledgedAt, 'acknowledgement persisted');
+
+    // The same prompt is raised again later by Claude: the item comes back.
+    const script = path.join(__dirname, '..', '..', 'hook', 'claude-focus-center-hook.js');
+    const input = JSON.stringify({ hook_event_name: 'Notification', session_id: 'host-sess-1', notification_type: 'permission_prompt', message: 'Claude needs your permission to use Bash' });
+    assert.equal(await runNode([script, 'Notification', api.spoolDir], input), 0);
+    await api.scanHookSpool();
+    assert.equal(groupOf(), 'group:needs-you');
+    assert.equal(api.getBadge(), 1);
+  }],
   ['resume refuses unknown sessions and deleted working directories', async () => {
     await activate();
     const unknown = await vscode.commands.executeCommand<{ launched: boolean; reason?: string }>('focusCenter.resumeSession', 'not-a-known-session');

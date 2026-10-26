@@ -70,7 +70,7 @@ export function classifyEvent(state: FocusState, event: NormalizedEvent, now: Da
       break;
     case 'session-end':
       for (const item of openItems(state, event.sessionId)) {
-        const openedAt = item.evidence[item.evidence.length - 1]?.timestamp ?? '';
+        const openedAt = openedAtOf(item) ?? '';
         if (item.status === 'needs-you' && ts && openedAt < ts) {
           setStatus(item, 'uncertain', SESSION_ENDED_NOTE, now, changes, 'Session ended with item open');
         }
@@ -214,7 +214,7 @@ function resolveIfAnswered(state: FocusState, item: AttentionItem, m: SessionMar
   if (item.kind === 'task' || item.status === 'resolved') {
     return;
   }
-  const openedAt = item.evidence[item.evidence.length - 1]?.timestamp;
+  const openedAt = openedAtOf(item);
   if (!openedAt) {
     return; // Unknown timing: leave it open rather than guess.
   }
@@ -237,13 +237,44 @@ function resolveIfAnswered(state: FocusState, item: AttentionItem, m: SessionMar
   }
 }
 
+/**
+ * New evidence newer than a user override supersedes it: a manual resolution, snooze or
+ * acknowledgement applied to *older* evidence must not hide a fresh blocker. The user's earlier
+ * action stays in the evidence list and the journal.
+ */
 function maybeReopen(item: AttentionItem, evidence: EvidenceRef, changes: Change[]): void {
-  // New direct evidence after a manual resolution reopens the item; the user's earlier action stays in the journal.
-  if (item.manuallyResolvedAt && evidence.timestamp > item.manuallyResolvedAt) {
+  const newer = (at: string | undefined) => at !== undefined && evidence.timestamp > at;
+  const cleared: string[] = [];
+  if (newer(item.manuallyResolvedAt)) {
     delete item.manuallyResolvedAt;
-    delete item.acknowledgedAt;
-    changes.push({ itemId: item.id, type: 'item-updated', summary: `Reopened by new evidence: ${item.title}` });
+    cleared.push('resolution');
   }
+  if (newer(item.snoozedAt)) {
+    delete item.snoozedUntil;
+    delete item.snoozedAt;
+    cleared.push('snooze');
+  }
+  if (newer(item.acknowledgedAt)) {
+    delete item.acknowledgedAt;
+    cleared.push('acknowledgement');
+  }
+  if (cleared.length > 0) {
+    changes.push({ itemId: item.id, type: 'item-updated', summary: `Reopened by new evidence (cleared your ${cleared.join(', ')}): ${item.title}` });
+  }
+}
+
+/**
+ * When an item last became pending: newest *source* evidence, or the user's reopen if later.
+ * User actions are not source evidence and must not move this point.
+ */
+function openedAtOf(item: AttentionItem): string | undefined {
+  let at = item.reopenedAt;
+  for (const e of item.evidence) {
+    if (e.kind !== 'user-action' && e.timestamp && (!at || e.timestamp > at)) {
+      at = e.timestamp;
+    }
+  }
+  return at;
 }
 
 function setStatus(item: AttentionItem, status: AttentionItem['status'], nextAction: string | undefined, now: Date, changes: Change[], summary: string): void {

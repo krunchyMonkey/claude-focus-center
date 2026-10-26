@@ -63,7 +63,11 @@ export interface AttentionItem {
   confidence: 'direct' | 'inferred' | 'unknown';
   acknowledgedAt?: string;
   snoozedUntil?: string;
+  /** When the current snooze was set; newer blocking evidence clears it. */
+  snoozedAt?: string;
   manuallyResolvedAt?: string;
+  /** When the user last reopened the item; counts as "pending since" for the rules. */
+  reopenedAt?: string;
   updatedAt: string;
 }
 
