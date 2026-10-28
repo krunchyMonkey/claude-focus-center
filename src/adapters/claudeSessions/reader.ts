@@ -137,3 +137,11 @@ async function fingerprint(handle: fs.FileHandle, bytes: number): Promise<string
   const { bytesRead } = await handle.read(buffer, 0, bytes, 0);
   return createHash('sha256').update(buffer.subarray(0, bytesRead)).digest('hex');
 }
+
+/** Shape check for a cursor read back from disk (state files are not trusted). */
+export function isCursor(value: unknown): value is ReadCursor {
+  const c = value as ReadCursor;
+  return typeof c === 'object' && c !== null
+    && [c.offset, c.size, c.mtimeMs, c.readTo, c.fingerprintBytes].every((n) => typeof n === 'number' && Number.isFinite(n) && n >= 0)
+    && typeof c.fingerprint === 'string' && typeof c.discardingLine === 'boolean';
+}

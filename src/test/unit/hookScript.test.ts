@@ -56,7 +56,7 @@ test('writes one sanitized spool record, exits 0 quickly and prints nothing', as
   assert.doesNotMatch(content, /SYNTHETIC-ARG/);
 });
 
-test('concurrent hooks each land intact; a replayed delivery adds no event', async () => {
+test('concurrent hooks each land intact; a repeat of the same payload is a separate event', async () => {
   const dir = await spoolDir();
   const inputs = Array.from({ length: 12 }, (_, i) => payload('Notification', { notification_type: 'permission_prompt', message: `Synthetic ${i}` }));
   const codes = await Promise.all(inputs.map((input) => runHookAsync('Notification', dir, input)));
@@ -67,11 +67,12 @@ test('concurrent hooks each land intact; a replayed delivery adds no event', asy
   assert.equal(first.stats.invalid, 0);
   assert.equal(new Set(first.events.map((e) => e.id)).size, 12);
 
-  // Same delivery again (replay / duplicate registration).
+  // The same payload again is a new occurrence (e.g. Claude asks for the same permission again).
   assert.equal(runHook('Notification', dir, inputs[0]).status, 0);
-  const replay = await consumer.scan();
-  assert.deepEqual(replay.events, []);
-  assert.equal(replay.stats.duplicatesDropped, 1);
+  const repeat = await consumer.scan();
+  assert.equal(repeat.events.length, 1);
+  assert.equal(repeat.stats.duplicatesDropped, 0);
+  assert.equal((await consumer.scan()).events.length, 0, 'but each spool file is still processed only once');
 });
 
 test('bad input or unusable storage still exits 0 without output', async () => {

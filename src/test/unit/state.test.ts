@@ -92,6 +92,7 @@ test('a second save keeps the previous good copy as .bak and leaves no temp file
   const s1 = emptyState();
   await store.save(s1);
   const s2 = emptyState();
+  s2.nextSeq = 6;
   s2.checkpointSeq = 5;
   await store.save(s2);
   assert.deepEqual((await fs.readdir(d)).sort(), ['state.json', 'state.json.bak']);
@@ -102,6 +103,7 @@ test('corrupted state is moved aside and the backup is used', async () => {
   const d = await dir();
   const file = path.join(d, 'state.json');
   const good = emptyState();
+  good.nextSeq = 8;
   good.checkpointSeq = 7;
   await fs.writeFile(`${file}.bak`, JSON.stringify(good));
   await fs.writeFile(file, '{"schemaVersion":1,"sessions":{'); // partial write
@@ -171,6 +173,7 @@ test('StateService debounces saves and flush persists immediately', async () => 
   const store = new JsonFileStore(path.join(d, 'state.json'));
   const service = await StateService.open(store, 10_000);
   service.update((s: FocusState) => {
+    s.nextSeq = 4;
     s.checkpointSeq = 3;
   });
   await assert.rejects(fs.readFile(store.path), { code: 'ENOENT' }, 'not written before the debounce');

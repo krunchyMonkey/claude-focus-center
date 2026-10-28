@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { copyHookScripts } from '../../adapters/claudeHooks/installer';
 import { writeScopeFile } from '../../adapters/claudeHooks/scopeFile';
+import { currentScope } from '../../ui/scopeConfig';
 import type { FocusCenterApi } from '../../extension';
 import { installNetworkTrap, runNode, runSuite } from '../harness';
 import { SYNTHETIC_REPOS, SYNTHETIC_SETTINGS, tenSessions, writeSessions } from '../fixtures/sessions';
@@ -69,7 +70,7 @@ const tests: Array<[string, () => Promise<void>]> = [
     assert.match(text, /Events ingested since start: 20/);
     assert.match(text, /0 file\(s\) read, 10 unchanged \(not reread\), 0 bytes/);
   }],
-  ['a hook event reaches the extension within 5 seconds; replay adds nothing', async () => {
+  ['a hook event reaches the extension within 5 seconds; a repeat is a new event on the same item', async () => {
     const api = await activate();
     const script = await installedHook(api);
     const input = JSON.stringify({ hook_event_name: 'PermissionRequest', session_id: 'host-sess-1', cwd: '/synthetic/repo', tool_name: 'Bash', tool_input: { command: 'x' } });
@@ -86,9 +87,10 @@ const tests: Array<[string, () => Promise<void>]> = [
     console.log(`    hook event latency: ${latency} ms`);
     assert.equal(api.getHookIngestion().byKind['permission-request'], 1);
 
+    // The identical payload again is a separate occurrence (counted) but merges into the same pending item.
     assert.equal(await runNode([script, 'PermissionRequest', api.spoolDir], input), 0);
     await api.scanHookSpool();
-    assert.equal(api.getHookIngestion().totalEvents, before + 1);
+    assert.equal(api.getHookIngestion().totalEvents, before + 2);
 
     // The permission request is classified as a direct Needs You item with hook evidence.
     const items = Object.values(api.getState().items).filter((i) => i.sourceSessionIds.includes('host-sess-1'));
@@ -105,7 +107,7 @@ const tests: Array<[string, () => Promise<void>]> = [
     // The view can be revealed and the item selected via the keyboard-accessible native tree.
     await vscode.commands.executeCommand('focusCenter.queue.focus');
     const text = (await vscode.commands.executeCommand<string[]>('focusCenter.showDiagnostics')).join('\n');
-    assert.match(text, /Received this run: 1 \(permission-request 1\)/);
+    assert.match(text, /Received this run: 2 \(permission-request 2\)/);
   }],
   ['state is persisted to global storage with sessions, cursors and no transcript content', async () => {
     const api = await activate();
@@ -361,6 +363,45 @@ const tests: Array<[string, () => Promise<void>]> = [
     await api.refresh();
     assert.ok(Object.keys(api.getState().sessions).length >= 10);
   }],
+  ['two windows: a foreign writer lock makes this window read-only; when it closes this window adopts the saved state', async () => {
+    const api = await activate();
+    const script = await installedHook(api);
+    const permission = JSON.stringify({ hook_event_name: 'PermissionRequest', session_id: 'lock-sess-1', cwd: '/synthetic/repo', tool_name: 'Bash' });
+    assert.equal(await runNode([script, 'PermissionRequest', api.spoolDir], permission), 0);
+    await api.scanHookSpool();
+    await api.flushState();
+    assert.equal(api.isWriter(), true);
+    const storage = path.dirname(api.statePath);
+    const lockFile = path.join(storage, 'state.lock');
+    assert.equal(JSON.parse(await fs.readFile(lockFile, 'utf8')).pid, process.pid, 'this window holds the lock');
+
+    // Another window takes over; this window notices on its next lock check.
+    await fs.writeFile(lockFile, JSON.stringify({ owner: 'other-window', pid: 1, heartbeatAt: Date.now() }));
+    await api.tickLock();
+    assert.equal(api.isWriter(), false);
+    assert.match(await fs.readFile(api.statePath, 'utf8'), /./);
+
+    // Changes are refused here and nothing is written, so the other window's data cannot be clobbered.
+    const item = Object.values(api.getState().items).find((i) => i.sourceSessionIds.includes('lock-sess-1'));
+    assert.ok(item, 'the hook-created item exists');
+    const savedBefore = await fs.readFile(api.statePath, 'utf8');
+    const refused = await vscode.commands.executeCommand<{ ok: boolean }>('focusCenter.acknowledge', item.id);
+    assert.equal(refused.ok, false);
+    await api.refresh();
+    await api.flushState();
+    assert.equal(await fs.readFile(api.statePath, 'utf8'), savedBefore, 'read-only window wrote nothing');
+
+    // The other window saves something, then closes (releases the lock).
+    const theirs = JSON.parse(savedBefore);
+    theirs.checkpointAt = 'saved-by-the-other-window';
+    await fs.writeFile(api.statePath, JSON.stringify(theirs));
+    await fs.rm(lockFile);
+    await api.tickLock();
+    assert.equal(api.isWriter(), true);
+    assert.equal(api.getState().checkpointAt, 'saved-by-the-other-window', 'adopted what the other window saved');
+    const ok = await vscode.commands.executeCommand<{ ok: boolean }>('focusCenter.acknowledge', item.id);
+    assert.equal(ok.ok, true, 'actions work again');
+  }],
   ['no network calls were made by the extension during the whole run', async () => {
     assert.deepEqual(networkCalls, []);
   }],
@@ -387,9 +428,11 @@ async function listFiles(dir: string): Promise<string[]> {
   return out.sort();
 }
 
-/** A copy of the compiled hook in the extension's storage, next to the live scope file (as Enable Hooks does). */
+/** What "Enable Claude Hooks" installs: the compiled hook next to a scope file with the current scope. */
 async function installedHook(api: FocusCenterApi): Promise<string> {
-  return copyHookScripts(path.join(__dirname, '..', '..', 'hook'), path.dirname(api.statePath));
+  const script = await copyHookScripts(path.join(__dirname, '..', '..', 'hook'), path.dirname(api.statePath));
+  await writeScopeFile(path.dirname(script), currentScope());
+  return script;
 }
 
 async function activate(): Promise<FocusCenterApi> {

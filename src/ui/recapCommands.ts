@@ -1,10 +1,14 @@
 import * as vscode from 'vscode';
 import { buildRecap, markCaughtUp } from '../domain/recap/recap';
 import type { StateService } from '../storage/stateService';
+import { requireWriter } from './writeGuard';
 import { DetailsProvider, recapUri } from './sessionCommands';
 
 export function registerRecapCommands(service: StateService, details: DetailsProvider, onChanged: () => void): vscode.Disposable[] {
   const mark = (): { checkpointSeq: number } => {
+    if (!requireWriter(service, 'mark yourself caught up')) {
+      return { checkpointSeq: service.state.checkpointSeq };
+    }
     // Only up to what the user has seen; newer changes stay for the next recap.
     const toSeq = details.lastRecapToSeq ?? buildRecap(service.state, new Date()).toSeq;
     service.update((state) => markCaughtUp(state, new Date(), toSeq));

@@ -47,7 +47,7 @@ let n = 0;
 async function putRecord(dir: string, sessionId: string, cwd: string | undefined, excerpt = 'SECRET-EXCERPT'): Promise<string> {
   await fs.mkdir(dir, { recursive: true });
   const raw = JSON.stringify({ hook_event_name: 'Stop', session_id: sessionId, ...(cwd ? { cwd } : {}), last_assistant_message: excerpt, n: n++ });
-  const record = toSpoolRecord(raw, undefined, new Date())!;
+  const record = toSpoolRecord(raw, undefined, new Date(), `nonce-${n}`)!;
   const name = `${Date.now()}-${record.id.slice(0, 16)}.json`;
   await fs.writeFile(path.join(dir, name), JSON.stringify(record));
   return name;

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { linkSession, linkToNewWorkstream, unlinkSession } from '../domain/workstreams/group';
 import type { FocusState } from '../domain/state/types';
 import type { StateService } from '../storage/stateService';
+import { requireWriter } from './writeGuard';
 
 /**
  * Manual grouping commands. Each takes an optional session id (from a tree item, issue 09) and
@@ -9,6 +10,9 @@ import type { StateService } from '../storage/stateService';
  */
 export function registerWorkstreamCommands(service: StateService, onChanged: () => void): vscode.Disposable[] {
   const link = async (arg?: unknown): Promise<void> => {
+    if (!requireWriter(service, 'link sessions')) {
+      return;
+    }
     const sessionId = sessionIdFrom(arg) ?? (await pickSession(service.state, 'Link which session?'));
     if (!sessionId) {
       return;
@@ -40,6 +44,9 @@ export function registerWorkstreamCommands(service: StateService, onChanged: () 
   };
 
   const unlink = async (arg?: unknown): Promise<void> => {
+    if (!requireWriter(service, 'change session grouping')) {
+      return;
+    }
     const linked = Object.keys(service.state.manualLinks);
     if (linked.length === 0) {
       void vscode.window.showInformationMessage('No sessions have manual grouping.');

@@ -2,10 +2,14 @@ import * as vscode from 'vscode';
 import { effectiveStatus } from '../domain/attention/effective';
 import { tomorrowMorning, triage, TriageAction, TriageResult } from '../domain/attention/triage';
 import type { StateService } from '../storage/stateService';
+import { requireWriter } from './writeGuard';
 
 /** Acknowledge / Snooze / Mark Resolved / Reopen. Each accepts a tree node, an item id, or asks. */
 export function registerTriageCommands(service: StateService, onChanged: () => void): vscode.Disposable[] {
   const run = (action: TriageAction, pickFilter: (status: string) => boolean) => async (arg?: unknown, until?: unknown): Promise<TriageResult> => {
+    if (!requireWriter(service, 'change this item')) {
+      return { ok: false, message: 'read-only window' };
+    }
     const itemId = itemIdFrom(arg) ?? (await pickItem(service, pickFilter));
     if (!itemId) {
       return { ok: false, message: 'cancelled' };

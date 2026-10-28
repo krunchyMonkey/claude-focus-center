@@ -29,6 +29,9 @@ export class SpoolWatcher {
   ) {}
 
   async start(): Promise<void> {
+    // Restartable: after the spool folder was deleted the old watcher is dead.
+    this.closeWatcher();
+    clearInterval(this.timer);
     await fs.mkdir(this.dir, { recursive: true });
     try {
       this.watcher = watch(this.dir, () => this.schedule());

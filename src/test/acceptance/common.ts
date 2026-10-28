@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { copyHookScripts } from '../../adapters/claudeHooks/installer';
+import { writeScopeFile } from '../../adapters/claudeHooks/scopeFile';
+import { currentScope } from '../../ui/scopeConfig';
 import type { FocusCenterApi } from '../../extension';
 import type { FocusNode } from '../../ui/nodes';
 import { runNode } from '../harness';
@@ -38,6 +40,7 @@ export function itemNodes(api: FocusCenterApi): FocusNode[] {
 export async function fireHook(api: FocusCenterApi, hook: { event: string; payload: object }): Promise<void> {
   // A copy next to the extension's live scope file, exactly what Enable Claude Hooks installs.
   const script = await copyHookScripts(COMPILED_HOOK_DIR, path.dirname(api.statePath));
+  await writeScopeFile(path.dirname(script), currentScope());
   assert.equal(await runNode([script, hook.event, api.spoolDir], JSON.stringify(hook.payload)), 0);
 }
 

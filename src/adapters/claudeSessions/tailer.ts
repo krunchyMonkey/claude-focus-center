@@ -1,7 +1,7 @@
 import { belongsToSession } from '../../domain/events/ids';
 import { normalizeTranscriptLine } from '../../domain/events/transcript';
 import type { NormalizedEvent } from '../../domain/events/types';
-import { readAppended, ReadCursor, ReadOptions } from './reader';
+import { isCursor, readAppended, ReadCursor, ReadOptions } from './reader';
 
 export interface TailTarget {
   sessionId: string;
@@ -149,11 +149,4 @@ export class TranscriptTailer {
     }
     return { events, stats };
   }
-}
-
-function isCursor(value: unknown): value is ReadCursor {
-  const c = value as ReadCursor;
-  return typeof c === 'object' && c !== null
-    && [c.offset, c.size, c.mtimeMs, c.readTo, c.fingerprintBytes].every((n) => typeof n === 'number' && Number.isFinite(n) && n >= 0)
-    && typeof c.fingerprint === 'string' && typeof c.discardingLine === 'boolean';
 }

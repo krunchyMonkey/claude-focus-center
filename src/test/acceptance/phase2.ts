@@ -30,19 +30,27 @@ export async function run(): Promise<void> {
       assert.equal(poll?.bytesRead, 0);
       assert.equal(poll?.filesUnchanged, 10);
     }],
-    ['replaying the same hook events creates no duplicate items', async () => {
+    ['Catch Me Up straight after the restart invents nothing', async () => {
+      await activate();
+      assert.equal((await vscode.commands.executeCommand<{ empty: boolean }>('focusCenter.catchMeUp')).empty, true);
+    }],
+    ['repeating the same hook payloads creates no duplicate items (each run is a separate occurrence)', async () => {
       const api = await activate();
       const before = Object.keys(api.getState().items).length;
+      const eventsBefore = api.getHookIngestion().totalEvents;
       for (const hook of [...goldPathHooks(g), permissionHook(g)]) {
         await fireHook(api, hook);
       }
       await api.scanHookSpool();
       await api.refresh();
-      assert.equal(Object.keys(api.getState().items).length, before);
+      assert.equal(api.getHookIngestion().totalEvents - eventsBefore, goldPathHooks(g).length + 1, 'every run counted');
+      assert.equal(Object.keys(api.getState().items).length, before, 'but no new items');
       assert.deepEqual(dashboard(api), phase1.dashboard);
     }],
-    ['Catch Me Up after restart: nothing invented; a new event shows up alone', async () => {
+    ['Catch Me Up after the repeats: mark caught up, then a new event shows up alone', async () => {
       const api = await activate();
+      await vscode.commands.executeCommand('focusCenter.catchMeUp');
+      await vscode.commands.executeCommand('focusCenter.markCaughtUp');
       assert.equal((await vscode.commands.executeCommand<{ empty: boolean }>('focusCenter.catchMeUp')).empty, true);
       await fireHook(api, { event: 'StopFailure', payload: { hook_event_name: 'StopFailure', session_id: g.sessions.taskBeta.id, cwd: g.sessions.taskBeta.cwd, error: 'rate_limit' } });
       await api.scanHookSpool();

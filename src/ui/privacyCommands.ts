@@ -2,12 +2,18 @@ import * as vscode from 'vscode';
 import { emptyState } from '../domain/state/types';
 import { deleteData, planDeletion } from '../storage/deleteData';
 import type { StateService } from '../storage/stateService';
+import { requireWriter } from './writeGuard';
 
 export interface PrivacyHooks {
   storageDir: string;
   hooksInstalled: () => Promise<boolean>;
   /** Clears in-memory read positions etc. after deletion. */
   afterDelete: () => void;
+  /**
+   * Runs `task` with ingestion, refreshes and saves quiesced, so no in-flight write can recreate
+   * deleted data.
+   */
+  runExclusive: <T>(task: () => Promise<T>) => Promise<T>;
 }
 
 export function registerPrivacyCommands(service: StateService, hooks: PrivacyHooks): vscode.Disposable[] {
@@ -16,6 +22,9 @@ export function registerPrivacyCommands(service: StateService, hooks: PrivacyHoo
   };
 
   const deleteAll = async (arg?: unknown): Promise<{ removed: string[]; paused: boolean }> => {
+    if (!requireWriter(service, 'delete Focus Center data')) {
+      return { removed: [], paused: false };
+    }
     const keepHookScripts = await hooks.hooksInstalled();
     const plan = await planDeletion(hooks.storageDir, keepHookScripts);
     // `{ confirmed: 'delete' | 'delete-and-pause' }` lets tests skip the modal; the palette passes nothing.
@@ -37,9 +46,12 @@ export function registerPrivacyCommands(service: StateService, hooks: PrivacyHoo
     if (pause) {
       await setPaused(true);
     }
-    const removed = await deleteData(plan, hooks.storageDir);
-    service.reset(emptyState());
-    hooks.afterDelete();
+    const removed = await hooks.runExclusive(async () => {
+      const deleted = await deleteData(plan, hooks.storageDir);
+      service.reset(emptyState());
+      hooks.afterDelete();
+      return deleted;
+    });
     void vscode.window.showInformationMessage(`Deleted ${removed.length} Focus Center item(s) from local storage.${pause ? ' Monitoring is paused.' : ''}`);
     return { removed, paused: pause };
   };

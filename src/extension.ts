@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { defaultSettingsPath, hookStatus, spoolDirFor } from './adapters/claudeHooks/installer';
@@ -25,6 +26,7 @@ import { RepoRootCache } from './adapters/git/repoRoot';
 import { regroup } from './domain/workstreams/group';
 import { JsonFileStore } from './storage/jsonStore';
 import { StateService } from './storage/stateService';
+import { WriterLock } from './storage/writerLock';
 import { FocusTreeProvider } from './ui/focusTreeProvider';
 import { registerHookCommands } from './ui/hookCommands';
 import { DETAILS_SCHEME, DetailsProvider, registerSessionCommands } from './ui/sessionCommands';
@@ -57,15 +59,24 @@ export interface FocusCenterApi {
   /** Scans the hook spool now; resolves when done. */
   scanHookSpool(): Promise<void>;
   refresh(): Promise<void>;
+  /** True when this window owns Focus Center's shared data (others are read-only). */
+  isWriter(): boolean;
+  /** Runs one writer-lock check now (normally every 5 s). */
+  tickLock(): Promise<void>;
 }
 
 let activeState: StateService | undefined;
+let activeLock: WriterLock | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<FocusCenterApi> {
   const storageDir = context.globalStorageUri.fsPath;
   const output = vscode.window.createOutputChannel('Focus Center');
   const store = new JsonFileStore(path.join(storageDir, 'state.json'));
-  const stateService = await StateService.open(store);
+  // One window writes the shared state; the others show it read-only (see WriterLock).
+  const lock = new WriterLock(path.join(storageDir, 'state.lock'), randomUUID());
+  activeLock = lock;
+  let writer = await lock.tryAcquire();
+  const stateService = await StateService.open(store, 500, { canWrite: () => lock.verify(), isWriter: () => writer });
   activeState = stateService;
   if (stateService.loaded.recovery) {
     const { problem, movedTo } = stateService.loaded.recovery;
@@ -84,6 +95,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
   const hookIngestion: HookIngestion = { totalEvents: 0, byKind: {}, outOfScope: 0 };
   let hookRefreshTimer: NodeJS.Timeout | undefined;
   let snoozeTimer: NodeJS.Timeout | undefined;
+  /** Set while data is being deleted: no ingestion, refresh or save may run. */
+  let quiesced = false;
 
   /** Rebuilds the tree from current state; cheap enough to run after every change. */
   const render = (): void => {
@@ -93,9 +106,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
     const count = needsYouCount(stateService.state, now);
     view.badge = count > 0 ? { value: count, tooltip: `${count} item${count === 1 ? '' : 's'} need${count === 1 ? 's' : ''} you` } : undefined;
     view.description = count > 0 ? `${count} need${count === 1 ? 's' : ''} you` : undefined;
-    view.message = currentScope().paused
-      ? 'Monitoring is paused. Run "Focus Center: Resume Monitoring" to continue.'
-      : lastDiscovery ? viewMessage(lastDiscovery) : undefined;
+    view.message = stateService.readOnly
+      ? "Another VS Code window owns Focus Center's data; this window is read-only."
+      : currentScope().paused
+        ? 'Monitoring is paused. Run "Focus Center: Resume Monitoring" to continue.'
+        : lastDiscovery ? viewMessage(lastDiscovery) : undefined;
     // Re-render exactly when the next snooze ends, so the item returns without a refresh.
     clearTimeout(snoozeTimer);
     const expiry = nextSnoozeExpiry(stateService.state, now);
@@ -107,6 +122,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
   /** Single entry point for new events from any source: deduped against everything already applied. */
   const ingest = (events: NormalizedEvent[]): NormalizedEvent[] => {
     let applied: NormalizedEvent[] = [];
+    if (quiesced) {
+      return applied;
+    }
     stateService.update((state) => {
       applied = applyEvents(state, events, new Date()).applied;
       if (applied.length > 0) {
@@ -121,6 +139,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
     spoolDir,
     spoolConsumer,
     (events, stats) => {
+      if (quiesced) {
+        return;
+      }
       hookIngestion.lastScan = stats;
       // Defense in depth: the hook already skips out-of-scope projects, but the spool is untrusted.
       const scope = currentScope();
@@ -147,6 +168,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
   );
 
   const discover = async (): Promise<void> => {
+    if (quiesced) {
+      return;
+    }
     const scope = currentScope();
     if (scope.paused) {
       render();
@@ -194,6 +218,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
   // At most one run at a time; requests made meanwhile share a single follow-up run,
   // so a burst of triggers reads the disk at most twice and never returns stale settings.
   const refresh = (): Promise<void> => {
+    if (quiesced) {
+      return Promise.resolve();
+    }
     if (!running) {
       running = discover().finally(() => (running = undefined));
       return running;
@@ -250,7 +277,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
       afterDelete: () => {
         tailer.reset();
         spoolConsumer.reset();
+        void spool.start(); // the spool folder was deleted; watch the recreated one
         render();
+      },
+      runExclusive: async (task) => {
+        quiesced = true;
+        try {
+          await Promise.allSettled([running, queued]); // let an in-flight refresh finish first
+          return await stateService.exclusive(task);
+        } finally {
+          quiesced = false;
+          void refresh();
+        }
       },
     }),
     vscode.workspace.onDidChangeConfiguration(async (e) => {
@@ -262,6 +300,33 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
       }
     }),
   );
+
+  /** Becomes the writer when the owning window closed: adopt what it saved, then carry on. */
+  const adoptDiskState = async (): Promise<void> => {
+    const loaded = await store.load();
+    stateService.reset(loaded.state);
+    tailer.importCursors(loaded.state.cursors);
+    spoolConsumer.reset(); // spool files consumed while read-only were never saved; rescan, deduped by id
+    render();
+    void refresh();
+  };
+  const lockTick = async (): Promise<void> => {
+    if (writer) {
+      writer = await lock.heartbeat();
+      if (!writer) {
+        render();
+        void vscode.window.showWarningMessage('Another VS Code window took over Focus Center. This window is now read-only.');
+      }
+    } else if (await lock.tryAcquire()) {
+      writer = true;
+      await adoptDiskState();
+      void vscode.window.showInformationMessage('Focus Center is now saving from this window (the other window closed).');
+    }
+  };
+  context.subscriptions.push(disposableInterval(() => void lockTick(), 5_000));
+  if (!writer) {
+    void vscode.window.showInformationMessage("Focus Center is open in another VS Code window, which owns its data. This window is read-only until that one closes.");
+  }
 
   await writeScopeFile();
   if (hasRestrictions(currentScope())) {
@@ -283,6 +348,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
     spoolDir,
     scanHookSpool: () => spool.scanNow(),
     refresh,
+    isWriter: () => writer,
+    tickLock: lockTick,
   };
 
   /** Shares the scope with the hook script, which reads it before writing any event. */
@@ -305,9 +372,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
 }
 
 export async function deactivate(): Promise<void> {
-  // Subscriptions are disposed by VS Code; pending state must still reach disk.
+  // Subscriptions are disposed by VS Code; pending state must still reach disk (if we own it).
   await activeState?.flush();
   activeState = undefined;
+  await activeLock?.release();
+  activeLock = undefined;
 }
 
 function disposableInterval(fn: () => void, ms: number): vscode.Disposable {
