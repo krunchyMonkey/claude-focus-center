@@ -62,32 +62,96 @@ Ensure-Field 'Decision' 'SINGLE_SELECT' 'Complete,Committed,Candidate,Optional,P
 Ensure-Field 'Effort (h)' 'NUMBER'
 Ensure-Field 'Owner attention (h)' 'NUMBER'
 
+# GitHub's item-edit CLI uses node IDs (not --owner / --url). Cache
+# project metadata so this also works with older gh versions on Windows.
+$projectDetail = (Invoke-Gh -Arguments @('project', 'view', "$number", '--owner', $owner, '--format', 'json') | ConvertFrom-Json)
+$script:projectId = [string]$projectDetail.id
+if ([string]::IsNullOrWhiteSpace($script:projectId)) {
+    throw 'Cannot determine GitHub Projects node ID.'
+}
+
+$schema = (Invoke-Gh -Arguments @('project', 'field-list', "$number", '--owner', $owner, '--limit', '100', '--format', 'json') | ConvertFrom-Json)
+$script:fieldMap = @{}
+foreach ($field in @($schema.fields)) {
+    $script:fieldMap[[string]$field.name] = $field
+}
+
+function Get-ProjectItem {
+    param([Parameter(Mandatory = $true)][string]$Url)
+    $list = (Invoke-Gh -Arguments @('project', 'item-list', "$number", '--owner', $owner, '--limit', '200', '--format', 'json') | ConvertFrom-Json)
+    foreach ($item in @($list.items)) {
+        if ([string]$item.content.url -eq $Url -or [string]$item.url -eq $Url) {
+            return $item
+        }
+    }
+    return $null
+}
+
+function Ensure-ProjectItem {
+    param([int]$Issue)
+    $url = "https://github.com/$repo/issues/$Issue"
+    $item = Get-ProjectItem -Url $url
+    if ($null -ne $item -and -not [string]::IsNullOrWhiteSpace([string]$item.id)) {
+        return $item
+    }
+    try {
+        $item = (Invoke-Gh -Arguments @('project', 'item-add', "$number", '--owner', $owner, '--url', $url, '--format', 'json') | ConvertFrom-Json)
+    } catch {
+        # An interrupted previous run may already have created this item.
+        $item = Get-ProjectItem -Url $url
+        if ($null -eq $item) { throw }
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$item.id)) {
+        $item = Get-ProjectItem -Url $url
+    }
+    if ($null -eq $item -or [string]::IsNullOrWhiteSpace([string]$item.id)) {
+        throw ("Unable to resolve a Project item ID for issue #{0}." -f $Issue)
+    }
+    return $item
+}
+
+function Set-ProjectField {
+    param(
+        [Parameter(Mandatory = $true)][string]$ItemId,
+        [Parameter(Mandatory = $true)][string]$FieldName,
+        [Parameter(Mandatory = $true)][string]$Value,
+        [switch]$Numeric
+    )
+    $field = $script:fieldMap[$FieldName]
+    if ($null -eq $field -or [string]::IsNullOrWhiteSpace([string]$field.id)) {
+        throw "Project field '$FieldName' was not found."
+    }
+    $args = @('project', 'item-edit', '--id', $ItemId, '--project-id', $script:projectId,
+              '--field-id', [string]$field.id)
+    if ($Numeric) {
+        $args += @('--number', $Value)
+    } else {
+        $choice = @($field.options | Where-Object { $_.name -eq $Value } | Select-Object -First 1)
+        if ($choice.Count -eq 0 -or [string]::IsNullOrWhiteSpace([string]$choice[0].id)) {
+            throw "Option '$Value' is not available for Project field '$FieldName'."
+        }
+        $args += @('--single-select-option-id', [string]$choice[0].id)
+    }
+    $null = Invoke-Gh -Arguments $args
+}
+
 function Set-Issue {
     param([int]$Issue, [string]$Release, [string]$Priority, [string]$Decision,
           [int]$Effort, [int]$OwnerHours, [switch]$Done)
-    $url = "https://github.com/$repo/issues/$Issue"
-    try {
-        $null = Invoke-Gh -Arguments @('project', 'item-add', "$number", '--owner', $owner, '--url', $url)
-    } catch {
-        # GitHub may return an error if the item already exists. Edit will check it.
-        Write-Host "Issue #${Issue}: already present or add reported an error; verifying by field update."
-    }
-    foreach ($field in @(
-        @('Release', $Release),
-        @('Priority', $Priority),
-        @('Decision', $Decision),
-        @('Effort (h)', "$Effort"),
-        @('Owner attention (h)', "$OwnerHours")
-    )) {
-        $null = Invoke-Gh -Arguments @('project', 'item-edit', "$number", '--owner', $owner,
-            '--url', $url, '--field', $field[0], '--value', $field[1])
-    }
-    if ($Done) {
-        try {
-            $null = Invoke-Gh -Arguments @('project', 'item-edit', "$number", '--owner', $owner,
-                '--url', $url, '--field', 'Status', '--value', 'Done')
-        } catch {
-            Write-Warning "Unable to set issue #$Issue to Done; adjust Status in the UI."
+
+    $item = Ensure-ProjectItem -Issue $Issue
+    $itemId = [string]$item.id
+    Set-ProjectField -ItemId $itemId -FieldName 'Release' -Value $Release
+    Set-ProjectField -ItemId $itemId -FieldName 'Priority' -Value $Priority
+    Set-ProjectField -ItemId $itemId -FieldName 'Decision' -Value $Decision
+    Set-ProjectField -ItemId $itemId -FieldName 'Effort (h)' -Value "$Effort" -Numeric
+    Set-ProjectField -ItemId $itemId -FieldName 'Owner attention (h)' -Value "$OwnerHours" -Numeric
+    if ($Done -and $script:fieldMap.ContainsKey('Status')) {
+        $status = $script:fieldMap['Status']
+        if (@($status.options | Where-Object { $_.name -eq 'Done' }).Count -gt 0) {
+            Set-ProjectField -ItemId $itemId -FieldName 'Status' -Value 'Done'
+        } else {
+            Write-Warning "Project Status has no Done option; set issue #$Issue manually."
         }
     }
     Write-Host ("Issue #{0} -> {1} ({2}h effort; {3}h owner)" -f $Issue, $Release, $Effort, $OwnerHours)
