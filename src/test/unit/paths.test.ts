@@ -5,6 +5,7 @@ import {
   encodeProjectDirName,
   isPathExcluded,
   isProjectDirExcluded,
+  isProjectDirPossiblyIncluded,
 } from '../../adapters/claudeSessions/paths';
 
 test('project folder encoding replaces every non-alphanumeric character', () => {
@@ -40,4 +41,17 @@ test('path exclusion on Windows folds case and separators', () => {
   assert.equal(isPathExcluded('C:\\Work\\Secret\\sub', ['c:/work/secret'], 'win32'), true);
   assert.equal(isPathExcluded('c:\\work\\secretive', ['C:\\Work\\Secret'], 'win32'), false);
   assert.equal(isPathExcluded('D:\\x', ['C:\\'], 'win32'), false);
+});
+
+test('filesystem-root exclusions match every descendant project folder (review: encoded root already ends in "-")', () => {
+  // "/" encodes to "-" and "/w/api" to "-w-api"; "C:\" encodes to "C--" and "C:\Users" to "C--Users".
+  assert.equal(isProjectDirExcluded('-w-api', ['/']), true);
+  assert.equal(isProjectDirExcluded('-', ['/']), true);
+  const cRoot = 'C:' + String.fromCharCode(92); // C:\
+  assert.equal(isProjectDirExcluded('C--Users-dev-repo', [cRoot]), true);
+  assert.equal(isProjectDirExcluded('c--users-dev-repo', ['C:/']), true, 'case-insensitive, either separator');
+  assert.equal(isProjectDirExcluded('D--work', [cRoot]), false);
+  assert.equal(isProjectDirPossiblyIncluded('-w-api', ['/']), true);
+  assert.equal(isProjectDirPossiblyIncluded('C--Users-dev', [cRoot]), true);
+  assert.equal(isProjectDirPossiblyIncluded('D--work', [cRoot]), false);
 });

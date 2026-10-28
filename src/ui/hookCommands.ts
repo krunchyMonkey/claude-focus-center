@@ -9,6 +9,7 @@ import {
   spoolDirFor,
 } from '../adapters/claudeHooks/installer';
 import { HOOK_EVENTS } from '../adapters/claudeHooks/settings';
+import { currentScope } from './scopeConfig';
 
 /** Registers the explicit, user-initiated hook opt-in / opt-out commands. */
 export function registerHookCommands(context: vscode.ExtensionContext, onChanged: () => void): vscode.Disposable[] {
@@ -37,7 +38,7 @@ export function registerHookCommands(context: vscode.ExtensionContext, onChanged
       return;
     }
     try {
-      const result = await enableHooks({ settingsPath, storageDir, nodePath, hookSourceDir });
+      const result = await enableHooks({ settingsPath, storageDir, nodePath, hookSourceDir, scope: currentScope() });
       onChanged();
       void vscode.window.showInformationMessage(
         result.changed

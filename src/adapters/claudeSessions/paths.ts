@@ -23,10 +23,19 @@ export function encodeProjectDirName(cwd: string): string {
  */
 export function isProjectDirExcluded(dirName: string, excludedPaths: readonly string[]): boolean {
   const dir = dirName.toLowerCase();
-  return excludedPaths.some((excluded) => {
-    const encoded = encodeProjectDirName(stripTrailingSeparators(excluded)).toLowerCase();
-    return encoded.length > 0 && (dir === encoded || dir.startsWith(encoded + '-'));
-  });
+  return excludedPaths.some((excluded) => matchesEncodedPrefix(dir, excluded));
+}
+
+/**
+ * Encoded folder name equals the encoded path or sits below it. A filesystem root already encodes
+ * with a trailing "-" ("/" → "-", "C:\" → "C--"), so its descendants must not need a second one.
+ */
+function matchesEncodedPrefix(dir: string, path: string): boolean {
+  const encoded = encodeProjectDirName(stripTrailingSeparators(path)).toLowerCase();
+  if (encoded.length === 0) {
+    return false;
+  }
+  return dir === encoded || dir.startsWith(encoded.endsWith('-') ? encoded : encoded + '-');
 }
 
 /** True when `cwd` equals or is inside one of the excluded paths. */
@@ -43,10 +52,7 @@ export function isProjectDirPossiblyIncluded(dirName: string, includedPaths: rea
     return true;
   }
   const dir = dirName.toLowerCase();
-  return includedPaths.some((included) => {
-    const encoded = encodeProjectDirName(stripTrailingSeparators(included)).toLowerCase();
-    return encoded.length > 0 && (dir === encoded || dir.startsWith(encoded + '-'));
-  });
+  return includedPaths.some((included) => matchesEncodedPrefix(dir, included));
 }
 
 function stripTrailingSeparators(p: string): string {

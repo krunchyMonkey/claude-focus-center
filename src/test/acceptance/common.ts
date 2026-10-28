@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
+import { copyHookScripts } from '../../adapters/claudeHooks/installer';
 import type { FocusCenterApi } from '../../extension';
 import type { FocusNode } from '../../ui/nodes';
 import { runNode } from '../harness';
 import { goldPathLayout } from './fixture';
 
 export const EXTENSION_ID = 'krunchymonkey.claude-focus-center';
-export const HOOK_SCRIPT = path.resolve(__dirname, '..', '..', 'hook', 'claude-focus-center-hook.js');
+const COMPILED_HOOK_DIR = path.resolve(__dirname, '..', '..', 'hook');
 
 export function layout() {
   const root = process.env.FOCUS_CENTER_ACCEPTANCE_ROOT;
@@ -35,7 +36,9 @@ export function itemNodes(api: FocusCenterApi): FocusNode[] {
 }
 
 export async function fireHook(api: FocusCenterApi, hook: { event: string; payload: object }): Promise<void> {
-  assert.equal(await runNode([HOOK_SCRIPT, hook.event, api.spoolDir], JSON.stringify(hook.payload)), 0);
+  // A copy next to the extension's live scope file, exactly what Enable Claude Hooks installs.
+  const script = await copyHookScripts(COMPILED_HOOK_DIR, path.dirname(api.statePath));
+  assert.equal(await runNode([script, hook.event, api.spoolDir], JSON.stringify(hook.payload)), 0);
 }
 
 export function log(line: string): void {

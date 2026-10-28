@@ -5,14 +5,20 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { after, test } from 'node:test';
 import { SpoolConsumer } from '../../adapters/claudeHooks/spool';
+import { installHookForTest } from '../fixtures/hooks';
 import { makeTempRoot } from '../fixtures/sessions';
 
-const script = path.resolve(__dirname, '../../hook/claude-focus-center-hook.js');
 const roots: string[] = [];
+/** Installs a real hook copy with an open scope under <root>/storage; returns its spool folder. */
 async function spoolDir(): Promise<string> {
   const r = await makeTempRoot('focus-center-hookrun-');
   roots.push(r);
-  return path.join(r, 'spool');
+  await installHookForTest(path.join(r, 'storage'));
+  return path.join(r, 'storage', 'spool');
+}
+/** The installed copy that belongs to a spool folder from spoolDir(). */
+function scriptFor(spool: string): string {
+  return path.join(path.dirname(spool), 'hooks', 'claude-focus-center-hook.js');
 }
 after(async () => {
   await Promise.all(roots.map((r) => fs.rm(r, { recursive: true, force: true })));
@@ -23,12 +29,12 @@ function payload(event: string, extra: object = {}): string {
 }
 
 function runHook(event: string, dir: string, input: string) {
-  return spawnSync(process.execPath, [script, event, dir], { input, encoding: 'utf8', timeout: 10_000 });
+  return spawnSync(process.execPath, [scriptFor(dir), event, dir], { input, encoding: 'utf8', timeout: 10_000 });
 }
 
 function runHookAsync(event: string, dir: string, input: string): Promise<number | null> {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [script, event, dir], { stdio: ['pipe', 'ignore', 'ignore'] });
+    const child = spawn(process.execPath, [scriptFor(dir), event, dir], { stdio: ['pipe', 'ignore', 'ignore'] });
     child.on('exit', resolve);
     child.stdin.end(input);
   });

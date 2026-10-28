@@ -1,3 +1,4 @@
+import { belongsToSession } from '../../domain/events/ids';
 import { normalizeTranscriptLine } from '../../domain/events/transcript';
 import type { NormalizedEvent } from '../../domain/events/types';
 import { readAppended, ReadCursor, ReadOptions } from './reader';
@@ -43,6 +44,29 @@ export class TranscriptTailer {
 
   constructor(private readonly options: TailerOptions = {}, initialCursors: Record<string, ReadCursor> = {}) {
     for (const [file, cursor] of Object.entries(initialCursors)) {
+      if (isCursor(cursor)) {
+        this.cursors.set(file, cursor);
+      }
+    }
+  }
+
+  /** Forgets read positions and seen ids for sessions that were purged (scope change). */
+  forget(sessionIds: ReadonlySet<string>, transcriptPaths: readonly string[]): void {
+    for (const p of transcriptPaths) {
+      this.cursors.delete(p);
+    }
+    for (const id of [...this.seen]) {
+      if (belongsToSession(id, sessionIds)) {
+        this.seen.delete(id);
+      }
+    }
+  }
+
+  /** Replaces read positions (after state was reloaded from disk) and forgets seen ids. */
+  importCursors(cursors: Record<string, ReadCursor>): void {
+    this.cursors.clear();
+    this.seen.clear();
+    for (const [file, cursor] of Object.entries(cursors)) {
       if (isCursor(cursor)) {
         this.cursors.set(file, cursor);
       }

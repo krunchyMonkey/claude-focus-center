@@ -5,7 +5,7 @@
 // Keep this folder dependency-free: it runs outside VS Code with whatever node is installed.
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { DEFAULT_SCOPE, inScope, MonitoringScope, parseScope, SCOPE_FILE } from './scope';
+import { CLOSED_SCOPE, inScope, MonitoringScope, parseScope, SCOPE_FILE } from './scope';
 import { toSpoolRecord } from './spoolRecord';
 
 const MAX_INPUT_BYTES = 1024 * 1024;
@@ -59,12 +59,12 @@ function write(spoolDir: string, raw: string, eventArg: string | undefined): voi
   }
 }
 
-/** Scope written by the extension next to this script; missing or broken means the default. */
+/** Scope written by the extension next to this script. Missing or unreadable means collect nothing. */
 function readScope(): MonitoringScope {
   try {
     return parseScope(fs.readFileSync(path.join(__dirname, SCOPE_FILE), 'utf8'));
   } catch {
-    return DEFAULT_SCOPE;
+    return CLOSED_SCOPE;
   }
 }
 

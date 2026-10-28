@@ -4,9 +4,17 @@ import { emptyState, FocusState } from '../domain/state/types';
 import { validateState } from './validate';
 
 /** Storage boundary, so the JSON file can later be swapped (e.g. for SQLite) without touching callers. */
+export interface SaveOptions {
+  /**
+   * After data was purged: do not keep the previous snapshot as a backup (it still holds the purged
+   * data) and make the backup a copy of the new state.
+   */
+  scrub?: boolean;
+}
+
 export interface StateStore {
   load(): Promise<LoadResult>;
-  save(state: FocusState): Promise<void>;
+  save(state: FocusState, options?: SaveOptions): Promise<void>;
 }
 
 export interface LoadResult {
@@ -51,11 +59,23 @@ export class JsonFileStore implements StateStore {
     return { state: emptyState(), source: 'empty', recovery };
   }
 
-  async save(state: FocusState): Promise<void> {
+  async save(state: FocusState, options: SaveOptions = {}): Promise<void> {
     await fs.mkdir(path.dirname(this.file), { recursive: true });
-    const tmp = `${this.file}.${process.pid}.${Date.now()}.tmp`;
+    const stamp = `${process.pid}.${Date.now()}`;
+    const tmp = `${this.file}.${stamp}.tmp`;
+    const tmpBackup = `${this.file}.${stamp}.bak.tmp`;
+    const text = JSON.stringify(state);
     try {
-      await fs.writeFile(tmp, JSON.stringify(state), { encoding: 'utf8', flag: 'wx' });
+      await fs.writeFile(tmp, text, { encoding: 'utf8', flag: 'wx' });
+      if (options.scrub) {
+        // Order matters for crash safety: drop the old backup first (it holds purged data), then
+        // replace the primary, then rewrite the backup from the new state.
+        await fs.rm(this.backupPath, { force: true });
+        await fs.rename(tmp, this.file);
+        await fs.writeFile(tmpBackup, text, { encoding: 'utf8', flag: 'wx' });
+        await fs.rename(tmpBackup, this.backupPath);
+        return;
+      }
       try {
         await fs.rename(this.file, this.backupPath);
       } catch (err) {
@@ -66,6 +86,7 @@ export class JsonFileStore implements StateStore {
       await fs.rename(tmp, this.file);
     } finally {
       await fs.rm(tmp, { force: true });
+      await fs.rm(tmpBackup, { force: true });
     }
   }
 

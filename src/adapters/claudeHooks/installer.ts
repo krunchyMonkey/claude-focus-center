@@ -4,6 +4,8 @@
 import { constants as fsConstants, promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { writeScopeFile } from './scopeFile';
+import type { MonitoringScope } from '../../hook/scope';
 import { HOOK_SCRIPT_NAME, HookCommand, installedEvents, installHooks, removeHooks, Settings } from './settings';
 
 export class SettingsUnreadableError extends Error {
@@ -87,11 +89,14 @@ export interface EnableOptions {
   nodePath: string;
   /** Folder with the compiled, dependency-free hook script shipped with the extension. */
   hookSourceDir: string;
+  /** Written next to the script before any hook is registered; the hook records nothing without it. */
+  scope: MonitoringScope;
   now?: Date;
 }
 
 export async function enableHooks(options: EnableOptions): Promise<HookChangeResult> {
   const scriptPath = await copyHookScripts(options.hookSourceDir, options.storageDir);
+  await writeScopeFile(path.dirname(scriptPath), options.scope);
 
   const loaded = await loadSettings(options.settingsPath);
   const cmd: HookCommand = { nodePath: options.nodePath, scriptPath, spoolDir: spoolDirFor(options.storageDir) };

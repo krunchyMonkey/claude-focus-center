@@ -13,14 +13,19 @@ export interface MonitoringScope {
 }
 
 export const DEFAULT_SCOPE: MonitoringScope = { excludedPaths: [], includedPaths: [], paused: false };
+/** Used when the scope is unknown or unreadable: collect nothing. */
+export const CLOSED_SCOPE: MonitoringScope = { excludedPaths: [], includedPaths: [], paused: true };
 
-/** True when a session in `cwd` may be collected. Unknown cwd is allowed only without an allow-list. */
+/**
+ * True when a session in `cwd` may be collected. An unknown location is allowed only when neither
+ * an exclusion nor an allow-list is configured: otherwise it could belong to an excluded project.
+ */
 export function inScope(cwd: string | undefined, scope: MonitoringScope, platform: NodeJS.Platform = process.platform): boolean {
   if (scope.paused) {
     return false;
   }
   if (!cwd) {
-    return scope.includedPaths.length === 0;
+    return scope.includedPaths.length === 0 && scope.excludedPaths.length === 0;
   }
   if (isUnder(cwd, scope.excludedPaths, platform)) {
     return false;
@@ -38,14 +43,26 @@ export function isUnder(cwd: string, bases: readonly string[], platform: NodeJS.
   });
 }
 
-/** Parses a scope file defensively; anything malformed falls back to the default (collect, no lists). */
+/**
+ * Parses a scope file strictly. Anything unreadable or malformed means the scope is unknown, and an
+ * unknown scope collects nothing (CLOSED_SCOPE) rather than everything.
+ */
 export function parseScope(text: string): MonitoringScope {
   try {
-    const v = JSON.parse(text) as Partial<MonitoringScope>;
-    const list = (x: unknown) => (Array.isArray(x) ? x.filter((p): p is string => typeof p === 'string' && p.trim() !== '') : []);
-    return { excludedPaths: list(v.excludedPaths), includedPaths: list(v.includedPaths), paused: v.paused === true };
+    const v: unknown = JSON.parse(text);
+    if (v === null || typeof v !== 'object' || Array.isArray(v)) {
+      return CLOSED_SCOPE;
+    }
+    const o = v as Record<string, unknown>;
+    const list = (x: unknown): string[] | undefined => (x === undefined ? [] : Array.isArray(x) && x.every((p) => typeof p === 'string') ? (x as string[]).filter((p) => p.trim() !== '') : undefined);
+    const excludedPaths = list(o.excludedPaths);
+    const includedPaths = list(o.includedPaths);
+    if (!excludedPaths || !includedPaths || (o.paused !== undefined && typeof o.paused !== 'boolean')) {
+      return CLOSED_SCOPE;
+    }
+    return { excludedPaths, includedPaths, paused: o.paused === true };
   } catch {
-    return DEFAULT_SCOPE;
+    return CLOSED_SCOPE;
   }
 }
 

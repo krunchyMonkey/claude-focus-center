@@ -4,12 +4,14 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { after, test } from 'node:test';
 import { copyHookScripts } from '../../adapters/claudeHooks/installer';
+import { writeScopeFile } from '../../adapters/claudeHooks/scopeFile';
+import { installHookForTest } from '../fixtures/hooks';
 import { discoverSessions } from '../../adapters/claudeSessions/discovery';
 import { purgeOutOfScope } from '../../domain/privacy/purge';
 import { applyEvents } from '../../domain/state/reducer';
 import { emptyState } from '../../domain/state/types';
 import { linkSession, regroup } from '../../domain/workstreams/group';
-import { DEFAULT_SCOPE, inScope, isUnder, parseScope } from '../../hook/scope';
+import { CLOSED_SCOPE, DEFAULT_SCOPE, inScope, isUnder, parseScope } from '../../hook/scope';
 import { deleteData, planDeletion } from '../../storage/deleteData';
 import { makeTempRoot, SYNTHETIC_REPOS, tenSessions, writeSessions } from '../fixtures/sessions';
 
@@ -36,10 +38,10 @@ test('scope: exclusions win, allow-list restricts, pause stops everything', () =
   assert.equal(isUnder('C:\\Work\\Api\\x', ['c:/work/api'], 'win32'), true);
 });
 
-test('scope file parsing never fails open into something stricter or looser than written', () => {
-  assert.deepEqual(parseScope('not json'), DEFAULT_SCOPE);
-  assert.deepEqual(parseScope('{"excludedPaths":["/a",3,""],"includedPaths":"x","paused":"yes"}'), { excludedPaths: ['/a'], includedPaths: [], paused: false });
+test('scope file parsing: valid files are read as written, anything else collects nothing', () => {
   assert.deepEqual(parseScope('{"paused":true}'), { excludedPaths: [], includedPaths: [], paused: true });
+  assert.deepEqual(parseScope('{"excludedPaths":["/a","  "],"includedPaths":[],"paused":false}'), { excludedPaths: ['/a'], includedPaths: [], paused: false });
+  assert.deepEqual(parseScope('not json'), CLOSED_SCOPE);
 });
 
 test('allow-list discovery reads only included projects', async () => {
@@ -62,7 +64,7 @@ test('purge forgets sessions, items, cursors, links and journal entries for out-
   linkSession(state, 'drop', 'session:drop', now, 'linux');
   regroup(state, 'linux');
 
-  assert.deepEqual(purgeOutOfScope(state, { excludedPaths: ['/w/secret'], includedPaths: [], paused: true }, 'linux'), ['drop'], 'pause does not prevent purging excluded data');
+  assert.deepEqual(purgeOutOfScope(state, { excludedPaths: ['/w/secret'], includedPaths: [], paused: true }, 'linux').sessionIds, ['drop'], 'pause does not prevent purging excluded data');
   assert.deepEqual(Object.keys(state.sessions), ['keep']);
   assert.equal(Object.values(state.items).length, 1);
   assert.deepEqual(state.cursors, {});
@@ -70,13 +72,13 @@ test('purge forgets sessions, items, cursors, links and journal entries for out-
   assert.ok(Object.values(state.workstreams).every((w) => !w.sessionIds.includes('drop')));
   assert.ok(state.journal.every((j) => j.sessionId !== 'drop'));
   assert.doesNotMatch(JSON.stringify(state), /\/w\/secret/);
-  assert.deepEqual(purgeOutOfScope(state, DEFAULT_SCOPE, 'linux'), []);
+  assert.deepEqual(purgeOutOfScope(state, DEFAULT_SCOPE, 'linux').sessionIds, []);
 });
 
 test('pausing alone never deletes data', () => {
   const state = emptyState();
   state.sessions.a = { source: 'claude-local', sessionId: 'a', cwd: '/w/api', lastSeenAt: '2026-01-01T00:00:00Z' };
-  assert.deepEqual(purgeOutOfScope(state, { ...DEFAULT_SCOPE, paused: true }, 'linux'), []);
+  assert.deepEqual(purgeOutOfScope(state, { ...DEFAULT_SCOPE, paused: true }, 'linux').sessionIds, []);
   assert.ok(state.sessions.a);
 });
 
@@ -106,6 +108,7 @@ test('delete plan covers only Focus Center files and keeps hook scripts while ho
 test('the installed hook writes nothing for excluded projects, outside the allow-list, or while paused', async () => {
   const storage = await temp();
   const script = await copyHookScripts(path.resolve(__dirname, '../../hook'), storage);
+  await writeScopeFile(path.dirname(script), DEFAULT_SCOPE);
   const spool = path.join(storage, 'spool');
   const scopeFile = path.join(path.dirname(script), 'scope.json');
   const run = (cwd: string) => spawnSync(process.execPath, [script, 'PermissionRequest', spool], {
@@ -130,9 +133,37 @@ test('the installed hook writes nothing for excluded projects, outside the allow
   assert.equal(run('/w/web').status, 0);
   assert.equal(await count(), 2);
 
+  // Fail closed: an unreadable scope means "collect nothing", not "collect everything".
   await fs.writeFile(scopeFile, '{broken');
+  assert.equal(run('/w/any').status, 0);
+  assert.equal(await count(), 2, 'a broken scope file records nothing');
+  await fs.rm(scopeFile);
+  assert.equal(run('/w/any').status, 0);
+  assert.equal(await count(), 2, 'a missing scope file records nothing');
+
+  // An open scope records again.
+  await fs.writeFile(scopeFile, JSON.stringify(DEFAULT_SCOPE));
   run('/w/any');
-  assert.equal(await count(), 3, 'a broken scope file falls back to the default');
+  assert.equal(await count(), 3);
+});
+
+test('a deeply nested project keeps its exclusion even though the spool record would drop its over-long cwd', async () => {
+  const storage = await temp();
+  const script = await installHookForTest(storage, { excludedPaths: ['/w/secret'], includedPaths: [], paused: false });
+  const spool = path.join(storage, 'spool');
+  const deep = '/w/secret/' + 'd/'.repeat(600); // > 1,024 characters
+  const input = (cwd: string | undefined) => JSON.stringify({ hook_event_name: 'Stop', session_id: 's-deep', cwd, last_assistant_message: 'SECRET-EXCERPT' });
+  const run = (cwd: string | undefined) => spawnSync(process.execPath, [script, 'Stop', spool], { input: input(cwd), encoding: 'utf8' });
+  const count = async () => (await fs.readdir(spool).catch(() => [])).length;
+
+  assert.equal(run(deep).status, 0);
+  assert.equal(run(undefined).status, 0);
+  assert.equal(await count(), 0, 'over-long or missing cwd is rejected while an exclusion exists');
+
+  // Without any restriction the same event is collected (its location is simply unknown).
+  await writeScopeFile(path.dirname(script), DEFAULT_SCOPE);
+  assert.equal(run(deep).status, 0);
+  assert.equal(await count(), 1);
 });
 
 test('shipped code has no network, telemetry or process-spawning dependencies', async () => {

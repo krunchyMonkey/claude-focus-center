@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
+import { copyHookScripts } from '../../adapters/claudeHooks/installer';
+import { writeScopeFile } from '../../adapters/claudeHooks/scopeFile';
 import type { FocusCenterApi } from '../../extension';
 import { installNetworkTrap, runNode, runSuite } from '../harness';
 import { SYNTHETIC_REPOS, SYNTHETIC_SETTINGS, tenSessions, writeSessions } from '../fixtures/sessions';
@@ -69,7 +71,7 @@ const tests: Array<[string, () => Promise<void>]> = [
   }],
   ['a hook event reaches the extension within 5 seconds; replay adds nothing', async () => {
     const api = await activate();
-    const script = path.join(__dirname, '..', '..', 'hook', 'claude-focus-center-hook.js');
+    const script = await installedHook(api);
     const input = JSON.stringify({ hook_event_name: 'PermissionRequest', session_id: 'host-sess-1', cwd: '/synthetic/repo', tool_name: 'Bash', tool_input: { command: 'x' } });
     const before = api.getHookIngestion().totalEvents;
     const started = Date.now();
@@ -183,7 +185,7 @@ const tests: Array<[string, () => Promise<void>]> = [
     assert.ok(saved.items[item.id].acknowledgedAt, 'acknowledgement persisted');
 
     // The same prompt is raised again later by Claude: the item comes back.
-    const script = path.join(__dirname, '..', '..', 'hook', 'claude-focus-center-hook.js');
+    const script = await installedHook(api);
     const input = JSON.stringify({ hook_event_name: 'Notification', session_id: 'host-sess-1', notification_type: 'permission_prompt', message: 'Claude needs your permission to use Bash' });
     assert.equal(await runNode([script, 'Notification', api.spoolDir], input), 0);
     await api.scanHookSpool();
@@ -204,7 +206,7 @@ const tests: Array<[string, () => Promise<void>]> = [
     const second = await vscode.commands.executeCommand<{ empty: boolean }>('focusCenter.catchMeUp');
     assert.equal(second.empty, true);
 
-    const script = path.join(__dirname, '..', '..', 'hook', 'claude-focus-center-hook.js');
+    const script = await installedHook(api);
     const input = JSON.stringify({ hook_event_name: 'StopFailure', session_id: 'host-sess-2', cwd: '/synthetic/repo', error: 'rate_limit' });
     assert.equal(await runNode([script, 'StopFailure', api.spoolDir], input), 0);
     await api.scanHookSpool();
@@ -276,19 +278,45 @@ const tests: Array<[string, () => Promise<void>]> = [
     const api = await activate();
     const [, , , beta] = tenSessions(); // beta fix/123-header
     assert.ok(api.getState().sessions[beta.sessionId], 'beta is stored before exclusion');
+
+    // A hook event for beta is recorded while beta is still in scope (spool file + state).
+    const early = await installedHook(api);
+    const earlyInput = JSON.stringify({ hook_event_name: 'Stop', session_id: 'beta-hook-0', cwd: path.join(SYNTHETIC_REPOS.beta, 'src'), last_assistant_message: 'BETA-SECRET-EXCERPT' });
+    assert.equal(await runNode([early, 'Stop', api.spoolDir], earlyInput), 0);
+    await api.scanHookSpool();
+    assert.ok(api.getState().sessions['beta-hook-0']);
+    await api.flushState();
+    await api.flushState();
+    const spoolText = async () => (await Promise.all((await fs.readdir(api.spoolDir)).filter((f) => f.endsWith('.json')).map((f) => fs.readFile(path.join(api.spoolDir, f), 'utf8')))).join('');
+    assert.match(await spoolText(), /BETA-SECRET-EXCERPT/);
+
     await setExcluded([SYNTHETIC_REPOS.beta]);
     try {
       await api.refresh();
       assert.equal(api.getState().sessions[beta.sessionId], undefined, 'stored data for the excluded project is purged');
+      assert.equal(api.getState().sessions['beta-hook-0'], undefined);
+
+      // Persisted copies are forgotten too: the saved snapshot, its backup and the spool.
+      await waitFor(async () => !/beta-web/.test(await fs.readFile(api.statePath, 'utf8')));
+      assert.doesNotMatch(await fs.readFile(`${api.statePath}.bak`, 'utf8'), /beta-web|BETA-SECRET/);
+      assert.doesNotMatch(await spoolText(), /BETA-SECRET-EXCERPT/);
       const storage = path.dirname(api.statePath);
       const scope = JSON.parse(await fs.readFile(path.join(storage, 'hooks', 'scope.json'), 'utf8'));
       assert.deepEqual(scope.excludedPaths, [SYNTHETIC_REPOS.beta], 'scope shared with the hook script');
 
-      // A hook without the scope file (the compiled copy) still writes; the extension drops it.
-      const script = path.join(__dirname, '..', '..', 'hook', 'claude-focus-center-hook.js');
+      // The real hook reads the scope the extension shared and records nothing for the excluded project.
+      const script = await installedHook(api);
       const before = api.getHookIngestion().outOfScope;
+      const spoolFiles = async () => (await fs.readdir(api.spoolDir).catch(() => [])).filter((f) => f.endsWith('.json')).length;
+      const filesBefore = await spoolFiles();
       const input = JSON.stringify({ hook_event_name: 'PermissionRequest', session_id: 'beta-hook-1', cwd: path.join(SYNTHETIC_REPOS.beta, 'src'), tool_name: 'Bash' });
       assert.equal(await runNode([script, 'PermissionRequest', api.spoolDir], input), 0);
+      assert.equal(await spoolFiles(), filesBefore, 'the hook wrote nothing');
+
+      // Defense in depth: even if a stale or tampered scope file let the event through, the extension drops it.
+      await writeScopeFile(path.dirname(script), { excludedPaths: [], includedPaths: [], paused: false });
+      assert.equal(await runNode([script, 'PermissionRequest', api.spoolDir], input), 0);
+      assert.equal(await spoolFiles(), filesBefore + 1);
       await api.scanHookSpool();
       assert.equal(api.getHookIngestion().outOfScope, before + 1);
       assert.equal(api.getState().sessions['beta-hook-1'], undefined);
@@ -296,6 +324,9 @@ const tests: Array<[string, () => Promise<void>]> = [
       await setExcluded([]);
       await api.refresh();
     }
+    // Including the project again rebuilds it: read positions and dedupe ids were forgotten.
+    assert.ok(api.getState().sessions[beta.sessionId], 'beta is back after being re-included');
+    assert.equal(api.getIngestion().lastPoll?.filesRead, 3, 'beta transcripts were read again');
   }],
   ['pause reads and records nothing; resume continues', async () => {
     const api = await activate();
@@ -354,6 +385,11 @@ async function listFiles(dir: string): Promise<string[]> {
     }
   }
   return out.sort();
+}
+
+/** A copy of the compiled hook in the extension's storage, next to the live scope file (as Enable Hooks does). */
+async function installedHook(api: FocusCenterApi): Promise<string> {
+  return copyHookScripts(path.join(__dirname, '..', '..', 'hook'), path.dirname(api.statePath));
 }
 
 async function activate(): Promise<FocusCenterApi> {

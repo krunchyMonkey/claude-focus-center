@@ -30,6 +30,7 @@ async function env() {
     storageDir: path.join(root, 'storage'),
     nodePath: path.join(root, 'bin', 'node'),
     hookSourceDir,
+    scope: { excludedPaths: ['/synthetic/secret'], includedPaths: [], paused: false },
   };
 }
 after(async () => {
@@ -68,7 +69,7 @@ test('enable then disable leaves pre-existing settings byte-identical, with back
   assert.deepEqual(on.events.sort(), [...HOOK_EVENTS].sort());
   assert.equal(await fs.readFile(on.backupPath!, 'utf8'), THIRD_PARTY);
   assert.equal(await fs.readFile(installedScriptPath(e.storageDir), 'utf8'), '// synthetic hook\n');
-  assert.deepEqual((await fs.readdir(path.dirname(installedScriptPath(e.storageDir)))).sort(), ['claude-focus-center-hook.js', 'redact.js']);
+  assert.deepEqual((await fs.readdir(path.dirname(installedScriptPath(e.storageDir)))).sort(), ['claude-focus-center-hook.js', 'redact.js', 'scope.json']);
   const installed = await fs.readFile(e.settingsPath, 'utf8');
   assert.match(installed, /^ {4}"model"/m, 'keeps 4-space indentation');
   assert.match(installed, /\/synthetic\/other-tool\/notify\.sh/);
@@ -141,4 +142,27 @@ test('node lookup scans absolute PATH entries only and never runs anything', asy
   assert.equal(await findNodeOnPath({ PATH: ['relative-dir', path.join(e.root, 'empty'), bin].join(sep) }), exe);
   assert.equal(await findNodeOnPath({ PATH: 'relative-dir' }), undefined);
   assert.equal(await findNodeOnPath({}), undefined);
+});
+
+test('enabling hooks installs the current scope before registering them, including after the hooks folder was deleted', async () => {
+  const e = await env();
+  const scopeFile = path.join(path.dirname(installedScriptPath(e.storageDir)), 'scope.json');
+  await enableHooks(e);
+  assert.deepEqual(JSON.parse(await fs.readFile(scopeFile, 'utf8')), e.scope);
+
+  // "Delete Focus Center Data" removes the hooks folder while hooks are disabled; enabling again must restore the scope.
+  await disableHooks(e);
+  await fs.rm(path.dirname(scopeFile), { recursive: true, force: true });
+  const paused = { excludedPaths: [], includedPaths: ['/synthetic/only'], paused: true };
+  await enableHooks({ ...e, scope: paused });
+  assert.deepEqual(JSON.parse(await fs.readFile(scopeFile, 'utf8')), paused);
+});
+
+test('enabling does not register hooks when the scope cannot be written', async () => {
+  const e = await env();
+  await fs.mkdir(e.storageDir, { recursive: true });
+  // A file where the hooks folder should be makes both the copy and the scope write fail.
+  await fs.writeFile(path.join(e.storageDir, 'hooks'), 'not a folder');
+  await assert.rejects(enableHooks(e));
+  await assert.rejects(fs.stat(e.settingsPath), { code: 'ENOENT' }, 'settings untouched');
 });

@@ -1,8 +1,8 @@
-import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { defaultSettingsPath, hookStatus, spoolDirFor } from './adapters/claudeHooks/installer';
-import { SpoolConsumer } from './adapters/claudeHooks/spool';
+import { purgeSpool, SpoolConsumer } from './adapters/claudeHooks/spool';
+import { writeScopeFile as writeScopeFileTo } from './adapters/claudeHooks/scopeFile';
 import { SpoolWatcher } from './adapters/claudeHooks/spoolWatcher';
 import { discoverSessions, DiscoveryResult } from './adapters/claudeSessions/discovery';
 import { defaultProjectsRoot } from './adapters/claudeSessions/paths';
@@ -28,10 +28,10 @@ import { StateService } from './storage/stateService';
 import { FocusTreeProvider } from './ui/focusTreeProvider';
 import { registerHookCommands } from './ui/hookCommands';
 import { DETAILS_SCHEME, DetailsProvider, registerSessionCommands } from './ui/sessionCommands';
-import { promises as fs } from 'node:fs';
 import { installedScriptPath } from './adapters/claudeHooks/installer';
-import { purgeOutOfScope } from './domain/privacy/purge';
-import { inScope, MonitoringScope, SCOPE_FILE } from './hook/scope';
+import { purgeOutOfScope, PurgeResult } from './domain/privacy/purge';
+import { inScope } from './hook/scope';
+import { currentScope, hasRestrictions } from './ui/scopeConfig';
 import { registerPrivacyCommands } from './ui/privacyCommands';
 import { registerRecapCommands } from './ui/recapCommands';
 import { registerTriageCommands } from './ui/triageCommands';
@@ -116,9 +116,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
     return applied;
   };
 
+  const spoolConsumer = new SpoolConsumer(spoolDir);
   const spool = new SpoolWatcher(
     spoolDir,
-    new SpoolConsumer(spoolDir),
+    spoolConsumer,
     (events, stats) => {
       hookIngestion.lastScan = stats;
       // Defense in depth: the hook already skips out-of-scope projects, but the spool is untrusted.
@@ -160,6 +161,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
           roots.set(s.sessionId, await repoRoots.get(s.cwd));
         }
       }
+      let purged: PurgeResult = { sessionIds: [], transcriptPaths: [] };
       const poll = await tailer.poll(discovery.sessions);
       ingestion.lastPoll = poll.stats;
       ingestion.totalInvalidLines += poll.stats.invalidLines + poll.stats.oversizedLines;
@@ -175,9 +177,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
         }
         state.cursors = tailer.exportCursors(new Set(discovery.sessions.map((s) => s.transcriptPath)));
         // Forget anything stored earlier for projects that are now out of scope.
-        purgeOutOfScope(state, scope);
+        purged = purgeOutOfScope(state, scope);
         regroup(state);
       });
+      if (purged.sessionIds.length > 0) {
+        await forgetPurged(purged.sessionIds, purged.transcriptPaths, scope);
+      }
       render();
     } catch (err) {
       output.appendLine(`Session discovery failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -244,12 +249,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
       hooksInstalled: async () => (await hookStatus(defaultSettingsPath())).events.length > 0,
       afterDelete: () => {
         tailer.reset();
+        spoolConsumer.reset();
         render();
       },
     }),
     vscode.workspace.onDidChangeConfiguration(async (e) => {
       if (['excludedPaths', 'includedPaths', 'paused'].some((k) => e.affectsConfiguration(`focusCenter.${k}`))) {
         await writeScopeFile();
+        await purgeSpool(spoolDir, currentScope());
         void vscode.commands.executeCommand('setContext', 'focusCenter.paused', currentScope().paused);
         void refresh();
       }
@@ -257,6 +264,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
   );
 
   await writeScopeFile();
+  if (hasRestrictions(currentScope())) {
+    await purgeSpool(spoolDir, currentScope()); // the scope may have changed while VS Code was closed
+  }
   void vscode.commands.executeCommand('setContext', 'focusCenter.paused', currentScope().paused);
   render();
   void refresh();
@@ -277,15 +287,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<FocusC
 
   /** Shares the scope with the hook script, which reads it before writing any event. */
   async function writeScopeFile(): Promise<void> {
-    const file = path.join(path.dirname(installedScriptPath(storageDir)), SCOPE_FILE);
     try {
-      await fs.mkdir(path.dirname(file), { recursive: true });
-      const tmp = `${file}.${process.pid}.tmp`;
-      await fs.writeFile(tmp, JSON.stringify(currentScope()));
-      await fs.rename(tmp, file);
+      await writeScopeFileTo(path.dirname(installedScriptPath(storageDir)), currentScope());
     } catch (err) {
       output.appendLine(`Could not write the monitoring scope for hooks: ${err instanceof Error ? err.message : String(err)}`);
     }
+  }
+
+  /** Everything that remembers purged sessions: read positions, dedupe ids, spool files and saved snapshots. */
+  async function forgetPurged(sessionIds: string[], transcriptPaths: string[], scope: ReturnType<typeof currentScope>): Promise<void> {
+    const ids = new Set(sessionIds);
+    tailer.forget(ids, transcriptPaths);
+    spoolConsumer.forgetSessions(ids);
+    await purgeSpool(spoolDir, scope, ids);
+    await stateService.flushScrubbed();
   }
 }
 
@@ -298,21 +313,6 @@ export async function deactivate(): Promise<void> {
 function disposableInterval(fn: () => void, ms: number): vscode.Disposable {
   const handle = setInterval(fn, ms);
   return { dispose: () => clearInterval(handle) };
-}
-
-function currentScope(): MonitoringScope {
-  const config = vscode.workspace.getConfiguration('focusCenter');
-  return { excludedPaths: pathList('excludedPaths'), includedPaths: pathList('includedPaths'), paused: config.get<unknown>('paused') === true };
-}
-
-function pathList(key: 'excludedPaths' | 'includedPaths'): string[] {
-  const configured = vscode.workspace.getConfiguration('focusCenter').get<unknown>(key);
-  if (!Array.isArray(configured)) {
-    return [];
-  }
-  return configured
-    .filter((p): p is string => typeof p === 'string' && p.trim() !== '')
-    .map((p) => (p === '~' || p.startsWith('~/') || p.startsWith('~\\') ? path.join(os.homedir(), p.slice(1)) : p));
 }
 
 function viewMessage(result: DiscoveryResult): string | undefined {

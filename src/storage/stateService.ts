@@ -6,6 +6,7 @@ export class StateService {
   private timer: NodeJS.Timeout | undefined;
   private saving: Promise<void> = Promise.resolve();
   private dirty = false;
+  private scrubNext = false;
   lastSavedAt?: string;
   lastSaveError?: string;
 
@@ -34,6 +35,13 @@ export class StateService {
     Object.assign(this.state, next);
   }
 
+  /** Saves now and drops the pre-purge backup (see SaveOptions.scrub). */
+  flushScrubbed(): Promise<void> {
+    this.scrubNext = true;
+    this.dirty = true;
+    return this.flush();
+  }
+
   /** Writes pending changes now. Saves are serialized; never throws (errors go to lastSaveError). */
   flush(): Promise<void> {
     clearTimeout(this.timer);
@@ -42,12 +50,15 @@ export class StateService {
         return;
       }
       this.dirty = false;
+      const scrub = this.scrubNext;
+      this.scrubNext = false;
       try {
-        await this.store.save(this.state);
+        await this.store.save(this.state, scrub ? { scrub: true } : undefined);
         this.lastSavedAt = new Date().toISOString();
         this.lastSaveError = undefined;
       } catch (err) {
         this.dirty = true;
+        this.scrubNext = this.scrubNext || scrub;
         this.lastSaveError = err instanceof Error ? err.message : String(err);
       }
     });

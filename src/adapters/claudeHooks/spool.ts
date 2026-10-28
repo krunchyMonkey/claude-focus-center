@@ -1,7 +1,9 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { normalizeSpoolRecord } from '../../domain/events/hook';
+import { belongsToSession } from '../../domain/events/ids';
 import type { NormalizedEvent } from '../../domain/events/types';
+import { inScope, MonitoringScope } from '../../hook/scope';
 
 export interface SpoolScanStats {
   dirFound: boolean;
@@ -105,6 +107,22 @@ export class SpoolConsumer {
     return { events, stats };
   }
 
+  /** Forgets everything remembered about purged sessions so they are ingested afresh if re-included. */
+  forgetSessions(sessionIds: ReadonlySet<string>): void {
+    for (const id of [...this.seen]) {
+      if (belongsToSession(id, sessionIds)) {
+        this.seen.delete(id);
+      }
+    }
+    this.processed.clear(); // file names carry no session id; rescanning is cheap and deduped by event id
+  }
+
+  /** Forgets everything (after Focus Center data was deleted). */
+  reset(): void {
+    this.processed.clear();
+    this.seen.clear();
+  }
+
   private async removeIfOlder(file: string, cutoffMs: number): Promise<boolean> {
     try {
       if (cutoffMs !== Number.POSITIVE_INFINITY && (await fs.stat(file)).mtimeMs >= cutoffMs) {
@@ -116,4 +134,47 @@ export class SpoolConsumer {
       return false;
     }
   }
+}
+
+export interface SpoolPurgeResult {
+  removed: number;
+}
+
+/**
+ * Deletes spool records that are out of scope (or belong to purged sessions), so excluding a project
+ * also forgets events the hook recorded before the exclusion. A record whose location is unknown is
+ * removed while any restriction is configured, matching the hook's fail-closed rule.
+ */
+export async function purgeSpool(dir: string, scope: MonitoringScope, sessionIds: ReadonlySet<string> = new Set(), platform: NodeJS.Platform = process.platform): Promise<SpoolPurgeResult> {
+  let names: string[];
+  try {
+    names = await fs.readdir(dir);
+  } catch {
+    return { removed: 0 };
+  }
+  const collecting = { ...scope, paused: false }; // pausing stops collection; it does not delete
+  let removed = 0;
+  for (const name of names) {
+    if (!RECORD_NAME.test(name)) {
+      continue;
+    }
+    const file = path.join(dir, name);
+    let record: { cwd?: unknown; sessionId?: unknown };
+    try {
+      const stat = await fs.stat(file);
+      if (!stat.isFile() || stat.size > MAX_RECORD_BYTES) {
+        continue;
+      }
+      record = JSON.parse(await fs.readFile(file, 'utf8')) as typeof record;
+    } catch {
+      continue; // not one of our records; leave it alone
+    }
+    const cwd = typeof record.cwd === 'string' ? record.cwd : undefined;
+    const sid = typeof record.sessionId === 'string' ? record.sessionId : undefined;
+    if (!inScope(cwd, collecting, platform) || (sid !== undefined && sessionIds.has(sid))) {
+      await fs.rm(file, { force: true });
+      removed++;
+    }
+  }
+  return { removed };
 }
