@@ -5,7 +5,7 @@ OWNER="krunchyMonkey"
 REPO="krunchyMonkey/claude-focus-center"
 TITLE="Claude Focus Center Roadmap"
 
-command -v gh >/dev/null || { echo 'Install GitHub CLI (gh) first.' >&2; exit 1; }
+command -v gh >/dev/null || { echo 'GitHub CLI (gh) is not visible inside Bash. On Windows, run powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/create-project-board.ps1 instead.' >&2; exit 1; }
 gh auth status >/dev/null || { echo 'Run gh auth login and gh auth refresh -s project.' >&2; exit 1; }
 
 number="$(gh project list --owner "$OWNER" --limit 100 --format json --jq '.projects[] | select(.title == "Claude Focus Center Roadmap") | .number' | head -n 1)"
