@@ -2,7 +2,7 @@
 
 **Know what needs your attention across Claude Code sessions—without managing another task list.**
 
-A planned local-first VS Code extension that turns activity across multiple Claude Code sessions, repositories, and worktrees into a concise attention queue.
+A local-first VS Code extension that turns activity across multiple Claude Code sessions, repositories, and worktrees into a concise attention queue.
 
 > **Project status (2026-10-28):** v0.1 MVP merged in [PR #17](https://github.com/krunchyMonkey/claude-focus-center/pull/17). Automated tests passed; the owner still needs to run a real-session pilot ([#14](https://github.com/krunchyMonkey/claude-focus-center/issues/14)) and manual live-session navigation review ([#18](https://github.com/krunchyMonkey/claude-focus-center/issues/18), draft [PR #19](https://github.com/krunchyMonkey/claude-focus-center/pull/19)). See [Roadmap & investment options](docs/ROADMAP.md).
 
