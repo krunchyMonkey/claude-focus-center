@@ -25,7 +25,7 @@ function Invoke-Gh {
 }
 
 # Avoid shell emulation: use the same PowerShell gh.exe that passed authentication.
-$null = Invoke-Gh -Arguments @('auth', 'token')
+$null = Invoke-Gh -Arguments @('auth', 'status')
 $projects = (Invoke-Gh -Arguments @('project', 'list', '--owner', $owner, '--limit', '100', '--format', 'json') | ConvertFrom-Json)
 $existing = @($projects.projects | Where-Object { $_.title -eq $title } | Select-Object -First 1)
 if ($existing.Count -gt 0) {
