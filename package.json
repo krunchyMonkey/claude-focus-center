@@ -1,0 +1,337 @@
+{
+  "name": "claude-focus-center",
+  "displayName": "Claude Focus Center",
+  "description": "Local-first attention queue across Claude Code sessions.",
+  "version": "0.0.1",
+  "publisher": "krunchymonkey",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/krunchyMonkey/claude-focus-center.git"
+  },
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "focusCenter",
+          "title": "Focus Center",
+          "icon": "media/focus-center.svg"
+        }
+      ]
+    },
+    "views": {
+      "focusCenter": [
+        {
+          "id": "focusCenter.queue",
+          "name": "Attention Queue",
+          "contextualTitle": "Focus Center"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "focusCenter.queue",
+        "contents": "Focus Center has not found any Claude Code sessions yet.\nIt reads session metadata from your local Claude Code folder (read-only; nothing leaves this machine). Optional hooks make permission requests appear instantly.\n[Refresh](command:focusCenter.refresh)\n[Enable Claude Hooks](command:focusCenter.enableHooks)\n[Show Diagnostics](command:focusCenter.showDiagnostics)"
+      }
+    ],
+    "commands": [
+      {
+        "command": "focusCenter.refresh",
+        "title": "Refresh",
+        "category": "Focus Center",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "focusCenter.showDiagnostics",
+        "title": "Show Diagnostics",
+        "category": "Focus Center",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "focusCenter.enableHooks",
+        "title": "Enable Claude Hooks…",
+        "category": "Focus Center"
+      },
+      {
+        "command": "focusCenter.disableHooks",
+        "title": "Disable Claude Hooks…",
+        "category": "Focus Center"
+      },
+      {
+        "command": "focusCenter.linkSession",
+        "title": "Link Session to Workstream…",
+        "category": "Focus Center"
+      },
+      {
+        "command": "focusCenter.unlinkSession",
+        "title": "Restore Automatic Grouping…",
+        "category": "Focus Center"
+      },
+      {
+        "command": "focusCenter.showDetails",
+        "title": "Show Details",
+        "category": "Focus Center",
+        "icon": "$(info)"
+      },
+      {
+        "command": "focusCenter.focusSession",
+        "title": "Go to Session",
+        "category": "Focus Center",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "focusCenter.resumeSession",
+        "title": "Resume Session in Terminal",
+        "category": "Focus Center",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "focusCenter.acknowledge",
+        "title": "Acknowledge",
+        "category": "Focus Center",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "focusCenter.snooze",
+        "title": "Snooze…",
+        "category": "Focus Center",
+        "icon": "$(clock)"
+      },
+      {
+        "command": "focusCenter.resolve",
+        "title": "Mark Resolved",
+        "category": "Focus Center",
+        "icon": "$(check)"
+      },
+      {
+        "command": "focusCenter.reopen",
+        "title": "Reopen",
+        "category": "Focus Center",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "focusCenter.catchMeUp",
+        "title": "Catch Me Up",
+        "category": "Focus Center",
+        "icon": "$(history)"
+      },
+      {
+        "command": "focusCenter.markCaughtUp",
+        "title": "Mark Caught Up",
+        "category": "Focus Center",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "focusCenter.pauseMonitoring",
+        "title": "Pause Monitoring",
+        "category": "Focus Center",
+        "icon": "$(debug-pause)"
+      },
+      {
+        "command": "focusCenter.resumeMonitoring",
+        "title": "Resume Monitoring",
+        "category": "Focus Center",
+        "icon": "$(debug-start)"
+      },
+      {
+        "command": "focusCenter.deleteData",
+        "title": "Delete Focus Center Data…",
+        "category": "Focus Center"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "focusCenter.catchMeUp",
+          "when": "view == focusCenter.queue",
+          "group": "navigation@0"
+        },
+        {
+          "command": "focusCenter.refresh",
+          "when": "view == focusCenter.queue",
+          "group": "navigation@1"
+        },
+        {
+          "command": "focusCenter.showDiagnostics",
+          "when": "view == focusCenter.queue",
+          "group": "navigation@2"
+        },
+        {
+          "command": "focusCenter.enableHooks",
+          "when": "view == focusCenter.queue",
+          "group": "hooks@1"
+        },
+        {
+          "command": "focusCenter.disableHooks",
+          "when": "view == focusCenter.queue",
+          "group": "hooks@2"
+        },
+        {
+          "command": "focusCenter.pauseMonitoring",
+          "when": "view == focusCenter.queue && !focusCenter.paused",
+          "group": "privacy@1"
+        },
+        {
+          "command": "focusCenter.resumeMonitoring",
+          "when": "view == focusCenter.queue && focusCenter.paused",
+          "group": "navigation@3"
+        },
+        {
+          "command": "focusCenter.deleteData",
+          "when": "view == focusCenter.queue",
+          "group": "privacy@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "focusCenter.resolve",
+          "when": "view == focusCenter.queue && viewItem =~ /^item\\.(needs-you|uncertain|in-progress)/",
+          "group": "inline@2"
+        },
+        {
+          "command": "focusCenter.snooze",
+          "when": "view == focusCenter.queue && viewItem =~ /^item\\.(needs-you|uncertain|in-progress)/",
+          "group": "inline@3"
+        },
+        {
+          "command": "focusCenter.reopen",
+          "when": "view == focusCenter.queue && viewItem =~ /^item\\.(waiting|resolved)/",
+          "group": "inline@2"
+        },
+        {
+          "command": "focusCenter.acknowledge",
+          "when": "view == focusCenter.queue && viewItem =~ /^item\\.(needs-you|uncertain|in-progress)$/",
+          "group": "0_triage@1"
+        },
+        {
+          "command": "focusCenter.snooze",
+          "when": "view == focusCenter.queue && viewItem =~ /^item\\.(needs-you|uncertain|in-progress)/",
+          "group": "0_triage@2"
+        },
+        {
+          "command": "focusCenter.resolve",
+          "when": "view == focusCenter.queue && viewItem =~ /^item\\.(needs-you|uncertain|in-progress)/",
+          "group": "0_triage@3"
+        },
+        {
+          "command": "focusCenter.reopen",
+          "when": "view == focusCenter.queue && viewItem =~ /^item\\.(waiting|resolved)/",
+          "group": "0_triage@4"
+        },
+        {
+          "command": "focusCenter.resumeSession",
+          "when": "view == focusCenter.queue && viewItem =~ /^(item|session)/",
+          "group": "inline@1"
+        },
+        {
+          "command": "focusCenter.focusSession",
+          "when": "view == focusCenter.queue && viewItem =~ /^(item|session)/",
+          "group": "1_session@0"
+        },
+        {
+          "command": "focusCenter.resumeSession",
+          "when": "view == focusCenter.queue && viewItem =~ /^(item|session)/",
+          "group": "1_session@1"
+        },
+        {
+          "command": "focusCenter.showDetails",
+          "when": "view == focusCenter.queue && viewItem =~ /^(item|session)/",
+          "group": "1_session@2"
+        },
+        {
+          "command": "focusCenter.linkSession",
+          "when": "view == focusCenter.queue && viewItem =~ /^(item|session)/",
+          "group": "workstream@1"
+        },
+        {
+          "command": "focusCenter.unlinkSession",
+          "when": "view == focusCenter.queue && viewItem =~ /^(item|session)/",
+          "group": "workstream@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "focusCenter.pauseMonitoring",
+          "when": "!focusCenter.paused"
+        },
+        {
+          "command": "focusCenter.resumeMonitoring",
+          "when": "focusCenter.paused"
+        },
+        {
+          "command": "focusCenter.showDetails",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Focus Center",
+      "properties": {
+        "focusCenter.excludedPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "application",
+          "markdownDescription": "Project folders whose Claude Code sessions are never read or recorded, by session discovery or by hooks. A path also excludes its subfolders, and `~` expands to your home folder. Data already stored for these projects is deleted on the next refresh. Matching errs towards exclusion."
+        },
+        "focusCenter.hooks.nodePath": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "markdownDescription": "Absolute path to the Node.js executable that Claude Code should use to run Focus Center hooks. Leave empty to use the first `node` on `PATH`. Only used when you run **Focus Center: Enable Claude Hooks**."
+        },
+        "focusCenter.claudePath": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "markdownDescription": "Absolute path to the Claude Code CLI used by **Resume Session**. Leave empty to use the first `claude` on `PATH`."
+        },
+        "focusCenter.includedPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "application",
+          "markdownDescription": "Optional allow-list. When set, **only** sessions in these project folders (and their subfolders) are read or recorded. `~` expands to your home folder. `focusCenter.excludedPaths` still wins."
+        },
+        "focusCenter.paused": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "markdownDescription": "Pause monitoring: no session files are read and hooks record nothing. Use **Focus Center: Pause / Resume Monitoring**."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -p . --watch",
+    "typecheck": "tsc -p . --noEmit",
+    "test:unit": "npm run compile && node --test \"out/test/unit/**/*.test.js\"",
+    "test:host": "npm run compile && node ./out/test/runHostTests.js",
+    "test": "npm run test:unit && npm run test:host && npm run test:acceptance",
+    "vscode:prepublish": "npm run compile",
+    "test:acceptance": "npm run compile && node ./out/test/runAcceptance.js",
+    "package": "npm run compile && vsce package --no-dependencies --out focus-center.vsix",
+    "test:vsix": "npm run package && node ./out/test/runVsixSmoke.js"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "@types/vscode": "1.100.0",
+    "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "4.0.0",
+    "typescript": "7.0.2"
+  }
+}
