@@ -1,16 +1,16 @@
 # Implementation checkpoint
 
-This file is the durable handoff between Claude Code sessions. Record **verified facts**, not inferred work status. Update at the end of every scoped issue or meaningful interruption.
+This file records **verified facts**, not inferred implementation status. Follow `docs/ROADMAP.md` for current release choices.
 
-## Current checkpoint
+## Current checkpoint (roadmap refresh — 2026-10-28)
 
-- Date: 2026-10-26
-- Current milestone: **M2 — complete except the human pilot (issue 14 partial)**
-- Last verified issue: **13-privacy-controls** (GitHub #13); **14-acceptance-qa is Partial** (all automated acceptance verified; human pilot not done)
-- Next action: **owner pilot** (README "Pilot checklist") and owner decision on pushing `feat/mvp` / opening a draft PR
-- Current branch / commit: **`feat/mvp`**, pushed; **draft PR #17** open against `main` (not merged; merging and publishing still need the owner)
-- Last executed verification (clean `npm ci`, 2026-10-27, after the PR #17 review fixes): `npm run typecheck` 0 errors; `npm test` = 209/209 unit + 22/22 extension-host + gold-path acceptance 7/7 → restart → 6/6; `npm run test:vsix` 1/1 (VS Code 1.100.0)
-- Known blockers: none technical. The pilot needs the owner. Dev-only audit advisory in `@vscode/vsce` → `@azure/msal-node` (see issue 14 checkpoint).
+- Core v0.1 merged to `main` through [PR #17](https://github.com/krunchyMonkey/claude-focus-center/pull/17).
+- Issues #1–#13 closed as completed. See PR #17 and the issue-specific historical checkpoints below for test evidence.
+- Issue [#14](https://github.com/krunchyMonkey/claude-focus-center/issues/14) remains **open** for the owner's real-session pilot and manual visual/accessibility checks.
+- Issue [#18](https://github.com/krunchyMonkey/claude-focus-center/issues/18) remains **open**; [draft PR #19](https://github.com/krunchyMonkey/claude-focus-center/pull/19) includes improvements but awaits manual click-through.
+- New candidate reliability issues #20–#22 and optional usability/release issues #23–#25 are tracked in `docs/ROADMAP.md`.
+- No post-MVP work is authorized by this roadmap update. Approval to invest beyond the personal pilot is a separate decision.
+- Latest published test details remain in PR #17, PR #19 and below; do not assume local-machine pilot passes from synthetic tests.
 
 ## Environment notes (probed 2026-10-26)
 

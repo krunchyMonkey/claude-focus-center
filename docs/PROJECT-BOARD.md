@@ -1,22 +1,38 @@
-# Claude Focus Center — MVP
+# GitHub Project — Claude Focus Center Roadmap
 
-A lightweight personal GitHub Project tracking delivery of a **local-first VS Code attention dashboard for Claude Code**.
+This is a **decision and capacity board**, not an obligation to deliver every feature.
 
-## Suggested board organization
+## Current project setup
 
-- **Status:** Backlog, Todo, In Progress, In Review, Done (the initial board uses GitHub defaults; customize the Status field in the UI if needed).
-- **Labels:** priority:p0, priority:p1, phase:foundation, phase:ingestion, phase:attention, phase:ux, phase:quality, type:feature, type:chore, type:spike, mvp.
-- **Views:** Board by Status, Table sorted by priority, and an MVP-only filter (`label:mvp`).
-- **Milestones:** M0 Foundation, M1 Attention, M2 Usable MVP (represented by issue labels or a separate Project field if desired).
+GitHub repository: https://github.com/krunchyMonkey/claude-focus-center
 
-## Weekly review questions
+The connected GitHub app can create and update issues but **cannot create a GitHub Projects v2 board**. To provision the board from your local authenticated GitHub CLI:
 
-1. Can a user immediately tell what needs their input?
-2. Which attention records lack trustworthy evidence?
-3. Are we collecting too much transcript data or creating noisy alerts?
-4. Can the newest vertical slice be demonstrated in a clean VS Code extension host?
-5. What's the smallest change that brings us closer to the full morning/day/evening workflow?
+```bash
+gh auth login
+gh auth refresh -s project
+git pull --ff-only
+bash scripts/create-project-board.sh
+```
 
-## GitHub bootstrap
+The script reuses `Claude Focus Center Roadmap` if one already exists; it links it to this repository, adds issues and configures fields. It leaves issue content, repository visibility, and code unchanged. The board is configured as **public** to match this repository; adjust visibility manually if preferred. If a command fails, fix the error and rerun it.
 
-`scripts/bootstrap-github.sh` works only with the existing public repository. It creates missing labels and issues, updates labels on existing issues, and optionally creates the personal Project board. It never creates a repository, changes visibility, or pushes Git history. Project board customization beyond the default Status field is intentionally manual for the first pass.
+## Recommended views
+
+1. **Now:** Table filtered to Release = `v0.1 Pilot`, grouped by Status; show `Effort (h)` and `Owner attention (h)`.
+2. **Roadmap:** Table or Roadmap grouped by Release, with Priority, Decision and remaining effort visible. Dates and capacity are approximate, described in `ROADMAP.md`; set real dates once the owner commits to a cadence.
+3. **Backlog choices:** Table grouped by Decision = `Candidate`, `Optional`, `Parked`, so features can be evaluated without taking them on.
+4. **Shipped:** Release = `Shipped`, for #1–#13. All were merged in PR #17; none consume remaining budget.
+
+GitHub's built-in **Status** field remains the delivery status. `Decision` expresses product investment, not implementation progress. An issue may be `Todo` and `Optional` without being a commitment.
+
+## Project conventions
+
+- A feature earns **Committed** only when the owner wants to spend time on it.
+- Human/owner time is tracked separately from total engineering time.
+- Estimates are remaining hours; after completion set remaining effort to 0 rather than keeping historical estimates in rollups.
+- Close items when acceptance is verified; don't automatically close #14 or #18 merely because automated tests passed.
+- Changes can be implemented in a branch/PR while the issue remains open for manual acceptance.
+- Recheck priorities after the personal pilot; the higher-level objective is *fewer interruptions*, not more features.
+
+See [ROADMAP.md](ROADMAP.md) for investment levels, target windows and the decision gates.

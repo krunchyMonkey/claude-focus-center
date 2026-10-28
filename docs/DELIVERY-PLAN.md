@@ -1,4 +1,6 @@
-# MVP delivery plan
+# MVP delivery plan (historical v0.1)
+
+> v0.1 was merged in PR #17. For current release targets and investment decisions, see [ROADMAP.md](ROADMAP.md). The original dependency-driven plan remains below as historical context.
 
 This is a **dependency-driven plan**, not a calendar commitment. Use the issue board to refine estimates after the first working slice.
 
