@@ -1,0 +1,2 @@
+# Keep executable shell scripts readable by Bash across Windows, macOS, and Linux.
+*.sh text eol=lf
