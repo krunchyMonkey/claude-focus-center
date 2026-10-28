@@ -70,7 +70,7 @@ function Set-Issue {
         $null = Invoke-Gh -Arguments @('project', 'item-add', "$number", '--owner', $owner, '--url', $url)
     } catch {
         # GitHub may return an error if the item already exists. Edit will check it.
-        Write-Host "Issue #$Issue: already present or add reported an error; verifying by field update."
+        Write-Host "Issue #${Issue}: already present or add reported an error; verifying by field update."
     }
     foreach ($field in @(
         @('Release', $Release),
