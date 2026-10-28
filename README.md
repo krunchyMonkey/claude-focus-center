@@ -8,7 +8,7 @@ A local-first VS Code extension that turns activity across multiple Claude Code 
 
 ## Choose how far to take it
 
-See [Roadmap: pilot, reliability, optional Marketplace beta](docs/ROADMAP.md) for estimates, decision gates and proposed time windows. [Create a repository-linked GitHub Projects roadmap](docs/PROJECT-BOARD.md) using `bash scripts/create-project-board.sh` after `gh auth refresh -s project`.
+See [Roadmap: pilot, reliability, optional Marketplace beta](docs/ROADMAP.md) for estimates, decision gates and proposed time windows. [Create a repository-linked GitHub Projects roadmap](docs/PROJECT-BOARD.md) using **PowerShell on Windows**: `powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\create-project-board.ps1` (or Bash on macOS/Linux: `bash scripts/create-project-board.sh`) after `gh auth refresh -s project`.
 
 ## The problem
 
