@@ -45,8 +45,8 @@ set_item() {
   gh project item-edit "$number" --owner "$OWNER" --url "$url" --field "Release" --value "$release" >/dev/null
   gh project item-edit "$number" --owner "$OWNER" --url "$url" --field "Priority" --value "$priority" >/dev/null
   gh project item-edit "$number" --owner "$OWNER" --url "$url" --field "Decision" --value "$decision" >/dev/null
-  gh project item-edit "$number" --owner "$OWNER" --url "$url" --field "Effort (h)" --number "$effort" >/dev/null
-  gh project item-edit "$number" --owner "$OWNER" --url "$url" --field "Owner attention (h)" --number "$owner_hours" >/dev/null
+  gh project item-edit "$number" --owner "$OWNER" --url "$url" --field "Effort (h)" --value "$effort" >/dev/null
+  gh project item-edit "$number" --owner "$OWNER" --url "$url" --field "Owner attention (h)" --value "$owner_hours" >/dev/null
   echo "Issue #$issue -> $release ($effort h effort; $owner_hours h owner)"
 }
 
