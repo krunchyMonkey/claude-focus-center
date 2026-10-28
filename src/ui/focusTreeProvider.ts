@@ -22,7 +22,7 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<FocusNode>, vs
     item.tooltip = node.tooltip && node.tooltipIsMarkdown ? new vscode.MarkdownString(node.tooltip) : node.tooltip;
     item.contextValue = node.contextValue;
     if (node.commandId) {
-      item.command = { command: node.commandId, title: 'Show Details', arguments: [node] };
+      item.command = { command: node.commandId, title: 'Go to Session', arguments: [node] };
     }
     item.accessibilityInformation = { label: node.ariaLabel ?? [node.label, node.description].filter(Boolean).join(', ') };
     if (node.icon) {

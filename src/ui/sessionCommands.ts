@@ -46,6 +46,14 @@ export function detailsUri(kind: 'item' | 'session', id: string): vscode.Uri {
   return vscode.Uri.from({ scheme: DETAILS_SCHEME, path: `/${kind}/${encodeURIComponent(id)}.md` });
 }
 
+export interface FocusOutcome {
+  /** Which surface took focus: a terminal we launched, the Claude Code panel, or a fresh resume. */
+  via: 'terminal' | 'claude-panel' | 'resume' | 'cancelled';
+  reason?: string;
+}
+
+const CLAUDE_PANEL_COMMAND = 'claude-vscode.editor.open';
+
 export interface ResumeOutcome {
   launched: boolean;
   reason?: string;
@@ -55,6 +63,16 @@ export interface ResumeOutcome {
 }
 
 export function registerSessionCommands(service: StateService): vscode.Disposable[] {
+  /** Terminals this extension launched, so a second click focuses the live one instead of resuming again. */
+  const terminals = new Map<string, vscode.Terminal>();
+  const closeListener = vscode.window.onDidCloseTerminal((closed) => {
+    for (const [id, terminal] of terminals) {
+      if (terminal === closed) {
+        terminals.delete(id);
+      }
+    }
+  });
+
   const showDetails = async (arg?: unknown): Promise<void> => {
     const { itemId, sessionId } = target(arg);
     const uri = itemId ? detailsUri('item', itemId) : sessionId ? detailsUri('session', sessionId) : undefined;
@@ -103,11 +121,42 @@ export function registerSessionCommands(service: StateService): vscode.Disposabl
     }
     const name = `Claude · ${session.cwd?.split(/[\\/]/).filter(Boolean).pop() ?? sessionId.slice(0, 8)}`;
     const terminal = vscode.window.createTerminal({ name, cwd: plan.cwd, shellPath: plan.shellPath, shellArgs: plan.shellArgs });
+    terminals.set(sessionId, terminal);
     terminal.show();
     return { launched: true, cwd: plan.cwd, shellPath: plan.shellPath, shellArgs: plan.shellArgs };
   };
 
+  /** Takes you to where the session lives: our terminal, else the Claude Code panel, else a new resume. */
+  const focusSession = async (arg?: unknown): Promise<FocusOutcome> => {
+    let { sessionId } = target(arg);
+    const { itemId } = target(arg);
+    if (!sessionId && itemId) {
+      sessionId = service.state.items[itemId]?.sourceSessionIds[0];
+    }
+    if (!sessionId) {
+      return { via: 'cancelled', reason: 'no-session' };
+    }
+    const live = terminals.get(sessionId);
+    if (live) {
+      live.show();
+      return { via: 'terminal' };
+    }
+    // Claude Code's panel command focuses the panel already showing this session, or opens one that loads it.
+    if ((await vscode.commands.getCommands(true)).includes(CLAUDE_PANEL_COMMAND)) {
+      try {
+        await vscode.commands.executeCommand(CLAUDE_PANEL_COMMAND, sessionId);
+        return { via: 'claude-panel' };
+      } catch {
+        // fall through to a terminal resume
+      }
+    }
+    const outcome = await resume(arg);
+    return outcome.launched ? { via: 'resume' } : { via: 'cancelled', reason: outcome.reason };
+  };
+
   return [
+    closeListener,
+    vscode.commands.registerCommand('focusCenter.focusSession', focusSession),
     vscode.commands.registerCommand('focusCenter.showDetails', showDetails),
     vscode.commands.registerCommand('focusCenter.resumeSession', resume),
   ];

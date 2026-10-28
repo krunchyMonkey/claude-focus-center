@@ -157,7 +157,7 @@ function itemNode(state: FocusState, item: AttentionItem, status: AttentionStatu
     icon: KIND_ICON[item.kind],
     iconColor: status === 'needs-you' ? (item.priority === 0 ? 'problemsErrorIcon.foreground' : 'problemsWarningIcon.foreground') : undefined,
     contextValue: `item.${status}${item.acknowledgedAt ? '.ack' : ''}`,
-    commandId: 'focusCenter.showDetails',
+    commandId: 'focusCenter.focusSession',
   };
 }
 

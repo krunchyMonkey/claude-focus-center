@@ -148,7 +148,7 @@ const tests: Array<[string, () => Promise<void>]> = [
     const item = Object.values(api.getState().items).find((i) => i.sourceSessionIds.includes('host-sess-1'));
     assert.ok(item, 'permission item from the hook test');
     const node = api.getRootNodes().flatMap((r) => r.children ?? []).flatMap((w) => w.children ?? []).find((n) => n.itemId === item.id);
-    assert.equal(node?.commandId, 'focusCenter.showDetails');
+    assert.equal(node?.commandId, 'focusCenter.focusSession');
     await vscode.commands.executeCommand('focusCenter.showDetails', node);
     const doc = vscode.workspace.textDocuments.find((d) => d.uri.scheme === 'focus-center' && d.uri.path.includes(encodeURIComponent(item.id)));
     assert.ok(doc, 'details document opened');

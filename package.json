@@ -83,6 +83,12 @@
         "icon": "$(info)"
       },
       {
+        "command": "focusCenter.focusSession",
+        "title": "Go to Session",
+        "category": "Focus Center",
+        "icon": "$(go-to-file)"
+      },
+      {
         "command": "focusCenter.resumeSession",
         "title": "Resume Session in Terminal",
         "category": "Focus Center",
@@ -225,6 +231,11 @@
           "command": "focusCenter.resumeSession",
           "when": "view == focusCenter.queue && viewItem =~ /^(item|session)/",
           "group": "inline@1"
+        },
+        {
+          "command": "focusCenter.focusSession",
+          "when": "view == focusCenter.queue && viewItem =~ /^(item|session)/",
+          "group": "1_session@0"
         },
         {
           "command": "focusCenter.resumeSession",
