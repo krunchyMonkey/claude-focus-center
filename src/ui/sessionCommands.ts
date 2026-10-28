@@ -55,12 +55,17 @@ export function detailsUri(kind: 'item' | 'session', id: string): vscode.Uri {
 }
 
 export interface FocusOutcome {
-  /** Which surface took focus: a terminal we launched, the Claude Code panel, or a fresh resume. */
-  via: 'terminal' | 'claude-panel' | 'resume' | 'cancelled';
+  /**
+   * Which surface took focus: a terminal we launched, the Claude Code panel, or a fresh resume.
+   * `prompt` means the session runs in a terminal outside VS Code, which we cannot focus; the user is asked.
+   */
+  via: 'terminal' | 'claude-panel' | 'resume' | 'prompt' | 'cancelled';
   reason?: string;
 }
 
 const CLAUDE_PANEL_COMMAND = 'claude-vscode.editor.open';
+/** Transcript `entrypoint` of sessions started in the Claude Code panel; anything else ran in an outside CLI. */
+const PANEL_ENTRYPOINT = 'claude-vscode';
 
 export interface ResumeOutcome {
   launched: boolean;
@@ -148,6 +153,15 @@ export function registerSessionCommands(service: StateService): vscode.Disposabl
     if (live) {
       live.show();
       return { via: 'terminal' };
+    }
+    // A session started in a plain terminal is not in a Claude panel, and opening one would fork the live
+    // conversation. Focus Center cannot focus a terminal it did not launch, so say so and let the user decide.
+    const entrypoint = service.state.sessions[sessionId]?.entrypoint;
+    if (entrypoint !== undefined && entrypoint !== PANEL_ENTRYPOINT) {
+      void vscode.window
+        .showInformationMessage('This session was started in a terminal outside VS Code, so Focus Center cannot switch to it. Resuming it here would start a second copy.', 'Resume in New Terminal')
+        .then((choice) => (choice ? resume(arg) : undefined));
+      return { via: 'prompt', reason: 'external-cli' };
     }
     // Claude Code's panel command focuses the panel already showing this session, or opens one that loads it.
     if ((await vscode.commands.getCommands(true)).includes(CLAUDE_PANEL_COMMAND)) {

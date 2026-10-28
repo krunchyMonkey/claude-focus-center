@@ -12,6 +12,8 @@ export interface SessionRecord {
   repoRoot?: string;
   transcriptPath?: string;
   gitBranch?: string;
+  /** How the session was started, from the transcript header (`claude-vscode`, `cli`, ...). */
+  entrypoint?: string;
   /** Explicit work-item tokens seen in task subjects (e.g. `AB#12`, `PROJ-3`, `#7`), bounded. */
   workItemHints?: string[];
   /** Newest source timestamp seen in any event for this session. */
