@@ -19,7 +19,21 @@ jobs:
           test -s planning/PROGRESS.md
           test "$(tail -n +2 planning/issue-index.tsv | wc -l | tr -d ' ')" -eq 16
       - name: Shell syntax
-        run: bash -n scripts/start-personal-build.sh
+        run: bash -n scripts/start-personal-build.sh scripts/create-project-board.sh
+  powershell-syntax:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse GitHub Projects setup script with Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'scripts/create-project-board.ps1').Path, [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
   build:
     runs-on: ubuntu-latest
     steps:
