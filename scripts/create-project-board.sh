@@ -40,7 +40,8 @@ ensure_field "Owner attention (h)" "NUMBER"
 set_item() {
   local issue="$1" release="$2" priority="$3" decision="$4" effort="$5" owner_hours="$6"
   local url="https://github.com/$REPO/issues/$issue"
-  gh project item-add "$number" --owner "$OWNER" --url "$url" >/dev/null
+  # Re-runnable: existing project items may report an already-added error.
+  gh project item-add "$number" --owner "$OWNER" --url "$url" >/dev/null 2>&1 || echo "Issue #$issue already present, or add failed; updating its fields next." >&2
   gh project item-edit "$number" --owner "$OWNER" --url "$url" --field "Release" --value "$release" >/dev/null
   gh project item-edit "$number" --owner "$OWNER" --url "$url" --field "Priority" --value "$priority" >/dev/null
   gh project item-edit "$number" --owner "$OWNER" --url "$url" --field "Decision" --value "$decision" >/dev/null
