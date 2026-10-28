@@ -231,6 +231,16 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 - Still unverified (owner pilot): real Claude Code transcripts and hooks on this machine; real `claude --resume`; visual look, high contrast, secondary side bar and screen reader; macOS/Linux; CI `build` job (branch not pushed).
 - Next action: owner runs the README "Pilot checklist"; owner decides on push / draft PR.
 
+### 2026-10-27 — Follow-up to issue 10 / Click an item to go to its session (GitHub #18)
+- Status: **Implemented; automated checks pass; manual click-through and tests for the new branches pending.**
+- Branch / commit: `feat/mvp`, a61827e "feat(10): click an item to go to its session" (pushed; draft PR #17).
+- Changed: new command `focusCenter.focusSession` ("Go to Session") in `src/ui/sessionCommands.ts`; item click (`src/ui/nodes.ts`, `src/ui/focusTreeProvider.ts`) now runs it instead of `showDetails` (Show Details stays in the context menu); `package.json` command + context-menu entry; one host assertion updated. Order: tracked terminal launched by Focus Center → `claude-vscode.editor.open <sessionId>` (Claude Code extension, command seen in installed 2.1.310) → existing resume fallback. Launched terminals are remembered per session so repeat clicks do not start duplicate resumes.
+- Checks actually run, on a clean worktree of `feat/mvp` at 37824b2 (which includes a61827e):
+  - `npm run test:unit` → 192/192; `npm run test:host` → 20/20; `npm run test:acceptance` → phase 1 7/7, restart, phase 2 5/5; `npm run test:vsix` → 1/1 (VS Code 1.100.0). Issue 10's original checks (details document, resume cwd/`--resume <id>`, unknown session and missing cwd refused) still pass.
+  - A run in the main checkout failed one host test ("a hook event reaches the extension within 5 seconds; replay adds nothing", 2 !== 1) while uncommitted edits to `src/hook/spoolRecord.ts` and related tests were present; the same test passes on the clean worktree, so it is not caused by this change.
+- Still unverified: no automated test covers the three `focusSession` branches (terminal reuse, Claude panel, fallback); real `claude-vscode.editor.open` behavior; sessions started in a plain CLI terminal are not distinguished from panel sessions (transcript `entrypoint` not read), so clicking one would open it in a Claude panel.
+- Next action: add host tests with a stubbed `claude-vscode.editor.open`; handle `entrypoint`; owner click-through. Tracked in #18.
+
 ## Checkpoint template (copy for each completed issue)
 
 ```markdown
