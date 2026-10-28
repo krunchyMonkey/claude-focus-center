@@ -19,6 +19,7 @@ export function registerRecapCommands(service: StateService, details: DetailsPro
 
   const catchMeUp = async (): Promise<{ empty: boolean; fromSeq: number; toSeq: number }> => {
     const recap = buildRecap(service.state, new Date());
+    details.lastRecapToSeq = recap.toSeq; // Mark Caught Up covers exactly what this recap shows
     const doc = await vscode.workspace.openTextDocument(recapUri(recap.fromSeq, recap.toSeq));
     await vscode.languages.setTextDocumentLanguage(doc, 'markdown');
     await vscode.window.showTextDocument(doc, { preview: true });

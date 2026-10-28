@@ -36,7 +36,8 @@ export function triage(state: FocusState, itemId: string, action: TriageAction, 
       delete item.snoozedAt;
       return record(state, item, now, 'Marked resolved by you');
     case 'reopen': {
-      const wasResolvedByRules = item.status === 'resolved' && !item.manuallyResolvedAt;
+      // Whether or not the user also resolved it by hand, a rule-resolved item must be reopened too.
+      const wasResolvedByRules = item.status === 'resolved';
       delete item.manuallyResolvedAt;
       delete item.snoozedUntil;
       delete item.snoozedAt;

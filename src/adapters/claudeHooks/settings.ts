@@ -48,8 +48,15 @@ export function isOwnedHandler(handler: unknown): boolean {
   }
   const args = handler.args;
   const command = handler.command;
-  const mentions = (s: unknown) => typeof s === 'string' && baseName(s) === HOOK_SCRIPT_NAME;
-  return (Array.isArray(args) && args.some(mentions)) || (typeof command === 'string' && command.includes(HOOK_SCRIPT_NAME));
+  const isOurScript = (s: unknown) => typeof s === 'string' && baseName(s) === HOOK_SCRIPT_NAME;
+  // Exec form lists the script as an argument; shell form puts it in the command string. Match a
+  // complete token (quotes respected) so lookalikes such as `…-hook.js.bak` are never ours.
+  return (Array.isArray(args) && args.some(isOurScript)) || (typeof command === 'string' && commandTokens(command).some(isOurScript));
+}
+
+/** Splits a shell-style command into tokens, honouring single and double quotes. */
+export function commandTokens(command: string): string[] {
+  return [...command.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3]);
 }
 
 /** Returns a new settings object with exactly one Focus Center handler per event. */

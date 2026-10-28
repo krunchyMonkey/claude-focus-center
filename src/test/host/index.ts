@@ -363,6 +363,32 @@ const tests: Array<[string, () => Promise<void>]> = [
     await api.refresh();
     assert.ok(Object.keys(api.getState().sessions).length >= 10);
   }],
+  ['an open recap stays frozen; Mark Caught Up only covers what was shown (review scenario)', async () => {
+    const api = await activate();
+    const script = await installedHook(api);
+    const fire = (session: string, tool: string) => runNode([script, 'PermissionRequest', api.spoolDir], JSON.stringify({ hook_event_name: 'PermissionRequest', session_id: session, cwd: '/synthetic/repo', tool_name: tool }));
+    assert.equal(await fire('recap-a', 'Bash'), 0);
+    await api.scanHookSpool();
+
+    const shown = await vscode.commands.executeCommand<{ toSeq: number }>('focusCenter.catchMeUp');
+    const doc = vscode.window.activeTextEditor!.document;
+    const before = doc.getText();
+    assert.match(before, /Permission needed: Bash/);
+
+    // A new event arrives while the recap is open; the tree re-renders and refreshes open documents.
+    assert.equal(await fire('recap-b', 'Edit'), 0);
+    await api.scanHookSpool();
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(doc.getText(), before, 'the open recap did not change');
+    assert.doesNotMatch(doc.getText(), /Permission needed: Edit/);
+
+    await vscode.commands.executeCommand('focusCenter.markCaughtUp');
+    assert.equal(api.getState().checkpointSeq, shown.toSeq, 'covers exactly what was shown');
+    await vscode.commands.executeCommand('focusCenter.catchMeUp');
+    const next = vscode.window.activeTextEditor!.document.getText();
+    assert.match(next, /Permission needed: Edit/, 'the unseen event is still in the next recap');
+    assert.doesNotMatch(next, /Permission needed: Bash/);
+  }],
   ['two windows: a foreign writer lock makes this window read-only; when it closes this window adopts the saved state', async () => {
     const api = await activate();
     const script = await installedHook(api);

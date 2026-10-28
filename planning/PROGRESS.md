@@ -8,9 +8,9 @@ This file is the durable handoff between Claude Code sessions. Record **verified
 - Current milestone: **M2 — complete except the human pilot (issue 14 partial)**
 - Last verified issue: **13-privacy-controls** (GitHub #13); **14-acceptance-qa is Partial** (all automated acceptance verified; human pilot not done)
 - Next action: **owner pilot** (README "Pilot checklist") and owner decision on pushing `feat/mvp` / opening a draft PR
-- Current branch / commit: **`feat/mvp`** (local only; not pushed, no draft PR — awaiting owner approval)
-- Last executed verification (clean `npm ci`): `npm run typecheck`; `npm test` = 182/182 unit + 20/20 extension-host + gold-path acceptance 7/7 → restart → 5/5; `npm run test:vsix` 1/1 (VS Code 1.100.0)
-- Known blockers: none technical. Pilot needs the owner; pushing/PR needs the owner's approval (public repo). Dev-only audit advisory in `@vscode/vsce` → `@azure/msal-node` (see issue 14 checkpoint).
+- Current branch / commit: **`feat/mvp`**, pushed; **draft PR #17** open against `main` (not merged; merging and publishing still need the owner)
+- Last executed verification (clean `npm ci`, 2026-10-27, after the PR #17 review fixes): `npm run typecheck` 0 errors; `npm test` = 209/209 unit + 22/22 extension-host + gold-path acceptance 7/7 → restart → 6/6; `npm run test:vsix` 1/1 (VS Code 1.100.0)
+- Known blockers: none technical. The pilot needs the owner. Dev-only audit advisory in `@vscode/vsce` → `@azure/msal-node` (see issue 14 checkpoint).
 
 ## Environment notes (probed 2026-10-26)
 
@@ -240,6 +240,25 @@ This file is the durable handoff between Claude Code sessions. Record **verified
   - A run in the main checkout failed one host test ("a hook event reaches the extension within 5 seconds; replay adds nothing", 2 !== 1) while uncommitted edits to `src/hook/spoolRecord.ts` and related tests were present; the same test passes on the clean worktree, so it is not caused by this change.
 - Still unverified: no automated test covers the three `focusSession` branches (terminal reuse, Claude panel, fallback); real `claude-vscode.editor.open` behavior; sessions started in a plain CLI terminal are not distinguished from panel sessions (transcript `entrypoint` not read), so clicking one would open it in a Claude panel.
 - Next action: add host tests with a stubbed `claude-vscode.editor.open`; handle `entrypoint`; owner click-through. Tracked in #18.
+
+### 2026-10-27 — PR #17 review: GitHub Copilot findings (12), all fixed
+- Status: **Fixed and verified**; awaiting a re-review and the owner's pilot. Three commits on `feat/mvp`: `fix(privacy)`, `fix(state)`, `fix(review)`.
+- Method: each finding was checked against the code first (all 12 were valid), then fixed with a regression test. The behavioural tests were run red before the fix where the API already existed (repeated identical permission request, nested validation, ownership lookalikes, root exclusions, unknown cwd, fail-open scope). `src/test/unit/review-scope.test.ts`, `review-integrity.test.ts`, `review-correctness.test.ts` hold the regressions; host and acceptance suites cover the end-to-end versions.
+- Privacy boundary (claims in the issue 13 checkpoint were too strong before this):
+  1. Scope fails closed. The hook records nothing when `scope.json` is missing or unreadable; a malformed scope parses as "collect nothing"; enabling hooks writes the current scope before registering them (including after Delete Data removed the hooks folder).
+  2. Unknown or over-long `cwd` is dropped whenever any exclusion or allow-list is configured.
+  3. Filesystem-root exclusions (`/`, `C:\`) match descendant project folders before any transcript is opened.
+  4. Excluding a project now also deletes its spool records, rewrites `state.json` and replaces `state.json.bak` (scrubbed save), and forgets read positions and dedupe ids, so re-including the project rebuilds its items. Not covered: `state.json.corrupt-…` copies set aside after a corruption are removed only by Delete.
+- Data integrity:
+  5. Hook event ids include a per-run nonce: a repeated identical payload is a new event (the item returns to Needs You after a resolve); the same spool file is processed once. Trade-off chosen with the owner: a hook registered twice is counted twice but merges into one item.
+  6. Delete runs exclusively: refreshes and ingestion are quiesced, an in-flight save is awaited, concurrent changes are dropped, nothing is saved from the old state afterwards.
+  7. One window owns the shared state (heartbeat lock, 5 s tick, 15 s stale, verified before every save). Other windows are read-only and refuse writing commands; a surviving window adopts the saved state. Residual risk: a window suspended for longer than the stale time can still write once between verify and rename (verify-then-write, no OS-level lock); changes made in memory by a read-only window are not kept.
+  8. State validation checks every nested record, so a malformed snapshot triggers recovery.
+- Correctness: hook ownership matches a complete script token (lookalikes such as `…-hook.js.bak` survive install and uninstall); Reopen works when an item was resolved both by the user and by the rules; an opened recap is a frozen snapshot bound to its journal range and Mark Caught Up covers exactly what was shown.
+- Also changed: the host/acceptance tests now run the hook from an installed copy with an explicit scope (the old direct run only worked because a missing scope used to mean "collect everything"); phase 2 of the acceptance run was reordered because repeated hook payloads now add journal entries.
+- Checks actually run (command + result), clean `npm ci`: `npm run typecheck` 0 errors; `npm test` → 209 unit pass (Needs You precision 100%, 7/7), 22/22 host (hook event latency 258 ms), acceptance 7/7 → restart → 6/6; `npm run test:vsix` 1/1.
+- Not verified: Copilot's re-review; two real VS Code windows at once (simulated with a foreign lock file); the lock under a real suspend/resume; real Claude Code sessions and hooks (owner pilot).
+- Merged-in note: a parallel session added issue #18 (click an item to go to its session, `a61827e`) and its checkpoint above; those changes are untouched.
 
 ## Checkpoint template (copy for each completed issue)
 

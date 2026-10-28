@@ -29,9 +29,22 @@ export interface Recap {
   empty: boolean;
 }
 
-export function buildRecap(state: FocusState, now: Date): Recap {
-  const fromSeq = state.checkpointSeq;
-  const entries = state.journal.filter((j) => j.seq > fromSeq);
+export interface RecapRange {
+  /** Exclusive lower bound; defaults to the durable checkpoint. */
+  fromSeq?: number;
+  /** Inclusive upper bound; defaults to the end of the journal. */
+  toSeq?: number;
+}
+
+/**
+ * Builds a recap of the journal after `fromSeq` up to `toSeq`. Passing the range a document was
+ * opened with keeps that document stable while newer events arrive.
+ */
+export function buildRecap(state: FocusState, now: Date, range: RecapRange = {}): Recap {
+  const fromSeq = range.fromSeq ?? state.checkpointSeq;
+  const end = state.nextSeq - 1;
+  const toSeq = Math.min(Math.max(range.toSeq ?? end, 0), end);
+  const entries = state.journal.filter((j) => j.seq > fromSeq && j.seq <= toSeq);
   const oldest = state.journal[0]?.seq;
   const truncated = oldest !== undefined && oldest > fromSeq + 1 && fromSeq > 0;
 
@@ -78,7 +91,7 @@ export function buildRecap(state: FocusState, now: Date): Recap {
 
   return {
     fromSeq,
-    toSeq: state.nextSeq - 1,
+    toSeq,
     checkpointAt: state.checkpointAt,
     needsYou,
     resolved,

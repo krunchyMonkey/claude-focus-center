@@ -12,19 +12,27 @@ export class DetailsProvider implements vscode.TextDocumentContentProvider, vsco
   private readonly changed = new vscode.EventEmitter<vscode.Uri>();
   readonly onDidChange = this.changed.event;
   private readonly open = new Set<string>();
-  /** End of the journal range shown in the most recent recap render. */
+  /** Rendered recap text per URI: a recap is a snapshot of the range it was opened with. */
+  private readonly recaps = new Map<string, string>();
+  /** End of the journal range of the recap the user most recently opened (what Mark Caught Up may cover). */
   lastRecapToSeq: number | undefined;
 
   constructor(private readonly service: StateService) {}
 
   provideTextDocumentContent(uri: vscode.Uri): string {
-    this.open.add(uri.toString());
     if (uri.path === '/recap.md') {
-      const now = new Date();
-      const recap = buildRecap(this.service.state, now);
-      this.lastRecapToSeq = recap.toSeq;
-      return recapMarkdown(recap, this.service.state, now);
+      const key = uri.toString();
+      let text = this.recaps.get(key);
+      if (text === undefined) {
+        const now = new Date();
+        const match = /range=(\d+)-(\d+)/.exec(uri.query);
+        const recap = buildRecap(this.service.state, now, match ? { fromSeq: Number(match[1]), toSeq: Number(match[2]) } : {});
+        text = recapMarkdown(recap, this.service.state, now);
+        this.recaps.set(key, text);
+      }
+      return text;
     }
+    this.open.add(uri.toString());
     const [, kind, file] = uri.path.split('/');
     const id = decodeURIComponent((file ?? '').replace(/\.md$/, ''));
     return kind === 'session' ? sessionDetailsMarkdown(this.service.state, id, new Date()) : itemDetailsMarkdown(this.service.state, id, new Date());
