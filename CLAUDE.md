@@ -1,6 +1,6 @@
 # Claude Focus Center — implementation instructions
 
-**Mission:** Build the local-first VS Code extension described in `docs/MVP-SPEC.md`. The product identifies *human attention*, not just active Claude conversations. The v0.1 MVP was merged in PR #17. Start with the real-world pilot (#14) and live-session manual validation (#18, draft PR #19). Do not reimplement closed issues #1–#13.
+**Mission:** Build the local-first VS Code extension described in `docs/MVP-SPEC.md`. The product identifies *human attention*, not just active Claude conversations. The v0.1 MVP was merged in PR #17. The owner authorized the v0.1 pilot-readiness implementation (#26, #27, #28), with #18 in existing draft PR #19. Issue #14 remains an owner-only acceptance gate. Do not reimplement #1–#13.
 
 ## Read before writing code
 
@@ -8,7 +8,7 @@
 2. `docs/ARCHITECTURE.md` — source adapters, data contracts, storage and UI.
 3. `docs/SECURITY.md` — non-negotiable data and hook boundaries.
 4. `docs/AGENT-KICKOFF.md` — how to work independently and hand off progress.
-5. `docs/ROADMAP.md` and GitHub Issues — current release priorities, decisions, effort estimates and acceptance criteria.
+5. `docs/PILOT-SPRINT.md`, `docs/ROADMAP.md` and GitHub Issues — active pilot scope, priority, dependencies and acceptance criteria.
 6. `planning/PROGRESS.md` — latest verified checkpoint. Update it as work is completed.
 
 ## Technical baseline
@@ -32,11 +32,11 @@
 ## Implementation loop
 
 1. Check working tree, branch, existing implementation and `planning/PROGRESS.md`; do not redo verified work.
-2. Select the next **committed** and dependency-ready issue in `docs/ROADMAP.md`. Start with owner pilot #14 / manual review #18. Do not start Candidate, Optional or Parked features without explicit approval.
-3. The MVP is on `main`. Use an issue-scoped branch from fresh `main` (or continue existing draft PR #19 for #18); commit each issue separately. Do not force-push, rewrite history, merge or modify unrelated branches.
+2. Follow `docs/PILOT-SPRINT.md`: implement #26, #27, then #28. Review #18 only in its existing draft PR #19. **Do not** close #14, or start Candidate/Optional/Parked issues.
+3. Check existing worktrees and dirty status before cloning or branching. Reuse an appropriate worktree. For #26–#28 use a clean `feat/pilot-readiness` branch based on current `origin/main`, with issue-scoped commits and one draft PR. Preserve the separate PR #19; do not force-push, merge or modify unrelated branches.
 4. Implement a small end-to-end vertical slice. Add synthetic fixtures and automated tests in the same change. Validate with tests, typecheck and build when available.
 5. Update `planning/PROGRESS.md` with actual commands run, results, remaining risks and next issue. Mark an issue **verified** only when its acceptance checks were executed.
-6. Commit locally with an issue-scoped message. With authenticated personal `origin`, you may push the issue branch and open/update a **draft PR** targeting `main`; never auto-merge or release. If permissions or authentication block this, leave a clean local branch and record the blocker.
+6. Commit locally with an issue-scoped message. With authenticated personal `origin`, you may push the pilot-readiness branch and open/update **one draft PR** targeting `main`; never auto-merge or release. If permissions or authentication block this, leave a clean local branch and record the blocker.
 7. Continue only within the owner-approved release investment and only when the previous slice is verified with no scope/security questions. Stop at meaningful permission, security, remote-state, billing, or architecture decisions.
 
 ## Quality bar
@@ -47,4 +47,4 @@
 - The extension remains useful when Claude CLI or hooks are missing: show diagnostics and partial coverage.
 - Prefer targeted tests and modest, observable data structures over elaborate orchestration.
 
-**Next action:** Owner pilot issue #14 and manual validation of issue #18 / draft PR #19. After the pilot, request a release investment decision before implementing #20–#25.
+**Next autonomous task:** #26 Windows preflight. Continue through #27 and #28 with real automated test evidence. Separately review #18/PR #19, then stop at owner-only pilot #14. Do not claim owner sign-off from synthetic tests.
