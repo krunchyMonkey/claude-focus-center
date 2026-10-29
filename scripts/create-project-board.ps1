@@ -158,8 +158,11 @@ function Set-Issue {
 }
 
 1..13 | ForEach-Object { Set-Issue $_ 'Shipped' 'P0' 'Complete' 0 0 -Done }
-Set-Issue 14 'v0.1 Pilot' 'P0' 'Committed' 5 3
-Set-Issue 18 'v0.1 Pilot' 'P0' 'Committed' 3 1
+Set-Issue 14 'v0.1 Pilot' 'P0' 'Committed' 0 3
+Set-Issue 18 'v0.1 Pilot' 'P0' 'Committed' 1 1
+Set-Issue 26 'v0.1 Pilot' 'P0' 'Committed' 3 0
+Set-Issue 27 'v0.1 Pilot' 'P0' 'Committed' 2 0
+Set-Issue 28 'v0.1 Pilot' 'P0' 'Committed' 2 0
 Set-Issue 20 'v0.2 Reliability' 'P0' 'Candidate' 8 2
 Set-Issue 21 'v0.2 Reliability' 'P1' 'Candidate' 8 1
 Set-Issue 22 'v0.2 Reliability' 'P1' 'Candidate' 6 2
