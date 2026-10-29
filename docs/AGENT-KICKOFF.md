@@ -1,35 +1,51 @@
-# Claude Code handoff — after v0.1 merge
+# Claude Code handoff — v0.1 personal pilot readiness
 
-The MVP has already shipped into `main` through [PR #17](https://github.com/krunchyMonkey/claude-focus-center/pull/17). Issues #1–#13 are complete. **Do not run the original M0–M2 implementation loop again.**
+Target **only** [krunchyMonkey/claude-focus-center](https://github.com/krunchyMonkey/claude-focus-center). The core MVP (#1–#13) is already merged in PR #17. This is not a request to rebuild it.
 
-## Read first
-
-1. `CLAUDE.md`, `docs/ROADMAP.md`, `docs/SECURITY.md` and `planning/PROGRESS.md`.
-2. `docs/MVP-SPEC.md` and `docs/ARCHITECTURE.md` for the product contract.
-3. GitHub [issue #14](https://github.com/krunchyMonkey/claude-focus-center/issues/14) (owner pilot) and [issue #18](https://github.com/krunchyMonkey/claude-focus-center/issues/18) (click-to-focus, with draft [PR #19](https://github.com/krunchyMonkey/claude-focus-center/pull/19)).
-
-## Recommended prompt
+## Copy-ready kickoff
 
 ```text
-Read CLAUDE.md, docs/ROADMAP.md, docs/SECURITY.md and planning/PROGRESS.md.
-The v0.1 MVP is already merged in PR #17. Do not reimplement issues #1-#13.
-First, prepare a concise local pilot checklist for issue #14 and the click-through
-validation for issue #18 / PR #19. Explain any live Claude session access,
-global hook installation or credential changes before attempting them.
-Do not read or publish my personal transcripts without my explicit consent.
-Run verification on synthetic fixtures and record actual results.
+Work only in https://github.com/krunchyMonkey/claude-focus-center.
 
-Once the pilot is complete, present a go/no-go decision for v0.2. Do not
-implement Candidate, Optional or Parked roadmap issues without my approval.
-For authorized work, use issue-specific branches, tests, verifiable progress
-checkpoints and draft PRs. Never auto-merge or publish.
+Inspect the current git remote, branch, dirty working tree, existing
+worktrees and open PRs BEFORE modifying anything. Reuse a matching worktree
+for the pilot branch or issue. Only create a worktree/clone if there is no
+existing suitable checkout; never overwrite a dirty tree.
+
+Read CLAUDE.md, docs/PILOT-SPRINT.md, docs/SECURITY.md,
+docs/ROADMAP.md and planning/PROGRESS.md. MVP #1-#13 is already merged
+in PR #17; do not reimplement those issues.
+
+Start implementation in this order:
+  #26 - Windows pilot preflight, packaging and diagnostics
+  #27 - synthetic + owner-run pilot walkthrough
+  #28 - local-only pilot scorecard (after #27)
+
+Use one clean feat/pilot-readiness integration branch from fresh origin/main
+or reuse an existing matching worktree. Do one scoped commit and record actual
+tests/results for each issue, update planning/PROGRESS.md and its GitHub issue,
+then open/update ONE draft PR. Do not merge.
+
+Separately inspect issue #18 and existing draft PR #19. Do not create
+a duplicate PR or implementation. Only targeted changes/review there.
+The owner must manually test real click-to-focus behavior.
+
+Issue #14 is the OWNER acceptance gate. Do not mark it complete or claim
+real personal Claude sessions were tested. Prepare clear instructions for
+the owner, and stop once all agent-ready preparation is verified.
+
+No unapproved reading of personal transcripts, proprietary work data,
+global Claude settings/hook changes, installation into the owner's real
+VS Code profile, paid APIs, credentials, telemetry, publication or
+permission-bypass. Use synthetic fixtures and approved normal tests.
+Do not begin #15-#16 or #20-#25 without new owner approval.
+
+At handoff list each issue, commit/PR, exact test outputs, residual risks,
+and the specific actions needed from the owner.
 ```
 
-## Daily pattern
+## What to build and what to leave to the owner
 
-- **Before coding:** check latest `main`, issues, branches and existing work; avoid duplicate implementation.
-- **During:** take one committed issue, make the smallest valuable slice, run relevant tests, and record evidence.
-- **After:** update `planning/PROGRESS.md` and the issue/PR with verification, remaining risk and owner decisions.
-- **Stop:** permissions, paid services, transcript transmission, global hook changes, publishing, merging or enterprise adaptation require owner authorization.
+Claude can build a preflight script, write the runbook, run fixture tests, produce a privacy-safe scoring template, review existing PR #19, and prepare draft PRs. Only the **owner** can opt into global hooks, install into their primary VS Code profile, inspect actual personal conversations, verify live-session behavior, and approve closing #14/#18.
 
-This is a public personal repo. Keep organizational data and secrets completely out of source and fixtures.
+The dependency chain and remaining-hour estimates are in [PILOT-SPRINT.md](PILOT-SPRINT.md). No automatic publishing, merging or organization-specific integration.
