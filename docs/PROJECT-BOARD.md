@@ -8,12 +8,12 @@ GitHub repository: https://github.com/krunchyMonkey/claude-focus-center
 
 The connected GitHub app can create and update issues but **cannot create a GitHub Projects v2 board**. To **synchronize the existing board** from your authenticated Windows PowerShell:
 
-\`\`\`powershell
+```powershell
 gh auth refresh -s project
 git fetch origin
 git restore --source=origin/main --worktree -- scripts/create-project-board.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\create-project-board.ps1
-\`\`\`
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\create-project-board.ps1
+```
 
 The script reuses `Claude Focus Center Roadmap` if one already exists; it links it to this repository, adds issues and configures fields. It leaves issue content, repository visibility, and code unchanged. The board is configured as **public** to match this repository; adjust visibility manually if preferred. If a command fails, fix the error and rerun it.
 
