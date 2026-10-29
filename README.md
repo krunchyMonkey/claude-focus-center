@@ -4,7 +4,7 @@
 
 A local-first VS Code extension that turns activity across multiple Claude Code sessions, repositories, and worktrees into a concise attention queue.
 
-> **Project status (2026-10-28):** v0.1 MVP merged in [PR #17](https://github.com/krunchyMonkey/claude-focus-center/pull/17). Automated tests passed; the owner still needs to run a real-session pilot ([#14](https://github.com/krunchyMonkey/claude-focus-center/issues/14)) and manual live-session navigation review ([#18](https://github.com/krunchyMonkey/claude-focus-center/issues/18), draft [PR #19](https://github.com/krunchyMonkey/claude-focus-center/pull/19)). See [Roadmap & investment options](docs/ROADMAP.md).
+> **Current status (2026-10-29):** Core v0.1 is merged (PR #17). The [groomed first-pilot sprint](docs/PILOT-SPRINT.md) is authorized for Claude: #26–#28. Existing draft PR #19 covers #18; #14 remains an owner-only real-session acceptance gate. No real-user pilot has been verified yet.
 
 ## Choose how far to take it
 
@@ -116,6 +116,8 @@ Each hook run writes one small JSON file into Focus Center's `spool/` folder (wr
 
 ## Pilot checklist
 
+Start with the [pilot sprint](docs/PILOT-SPRINT.md). Claude's development handoff is in [AGENT-KICKOFF.md](docs/AGENT-KICKOFF.md); detailed owner pilot steps and scorecard are deliverables of issues #27 and #28.
+
 1. `npm run package`, then `code --install-extension focus-center.vsix` (or press F5 from this folder).
 2. Open **Focus Center** and run **Show Diagnostics**: check the session root, the monitored projects and that coverage is reported honestly.
 3. Optionally set `focusCenter.excludedPaths` / `includedPaths`, and enable hooks (**Enable Claude Hooks…**, after reading the confirmation).
@@ -142,24 +144,20 @@ Each hook run writes one small JSON file into Focus Center's `spool/` folder (wr
 
 ## GitHub issues and optional Project board
 
-This repository is already public at [`krunchyMonkey/claude-focus-center`](https://github.com/krunchyMonkey/claude-focus-center). Specifications live in `docs/` and the 16 implementation issues are tracked in [GitHub Issues](https://github.com/krunchyMonkey/claude-focus-center/issues). The 14 MVP issues are grouped into M0, M1, and M2; issues 15-16 are post-MVP.
+This repository is already public at [`krunchyMonkey/claude-focus-center`](https://github.com/krunchyMonkey/claude-focus-center). Specifications live in `docs/` and the GitHub implementation issues are tracked in [GitHub Issues](https://github.com/krunchyMonkey/claude-focus-center/issues). The 14 MVP issues are grouped into M0, M1, and M2; issues 15-16 are post-MVP.
 
-GitHub Issues is the source of truth for the MVP backlog. A GitHub Projects board can be added later through the GitHub UI; it is not required to start implementing. No repository bootstrap is needed.
+GitHub Issues remains the implementation source of truth; [Project #8](https://github.com/users/krunchyMonkey/projects/8) tracks release and owner-effort estimates. [Board sync instructions](docs/PROJECT-BOARD.md).
 
-## Hand off implementation to your personal Claude Code
+## Kick off the groomed pilot with your personal Claude
 
-Clone the public personal repository into a dedicated folder and open it in VS Code. `CLAUDE.md` is the standing project instruction file and `docs/AGENT-KICKOFF.md` contains a detailed build prompt. For supported Claude Code versions, you can launch a background implementation session:
+Open this repository and follow [the copy-ready kickoff prompt](docs/AGENT-KICKOFF.md). Claude may implement #26–#28 and prepare #18/PR #19 for your testing; it must not claim that #14 is accepted.
 
 ```bash
-./scripts/start-personal-build.sh --dry-run      # preview exactly what it asks
-./scripts/start-personal-build.sh --background   # run on your machine
-claude agents                                    # inspect agents
+./scripts/start-personal-build.sh --dry-run       # inspect the current scoped prompt
+./scripts/start-personal-build.sh --interactive   # start the personal Claude session
 ```
 
-Or run `./scripts/start-personal-build.sh --interactive` if you prefer normal supervision. **No model inference or API tokens are needed by the extension at runtime for v0.1.** Your personal Claude Code account is used only for development. Never include work data or credentials in the personal repo; see `docs/ENTERPRISE-FORK.md`.
-
-The first user-visible slice should show an empty native Tree View in an Extension Development Host, then recent local session metadata. Read `docs/SECURITY.md` before adding transcript ingestion or hooks.
-
+No model token is needed by the extension at runtime. For the public repository, use synthetic fixtures and never check in personal transcripts, secrets or organizational data.
 
 ## References
 
