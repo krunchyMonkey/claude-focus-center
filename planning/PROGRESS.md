@@ -2,6 +2,15 @@
 
 This file records **verified facts**, not inferred implementation status. Follow `docs/ROADMAP.md` for current release choices.
 
+## 2026-10-29 — Pilot sprint grooming (planning only)
+
+- New agent-ready P0 stories: [#26](https://github.com/krunchyMonkey/claude-focus-center/issues/26) Windows preflight; [#27](https://github.com/krunchyMonkey/claude-focus-center/issues/27) pilot runbook; [#28](https://github.com/krunchyMonkey/claude-focus-center/issues/28) scorecard (depends on #27).
+- Existing [#18](https://github.com/krunchyMonkey/claude-focus-center/issues/18) remains in draft [PR #19](https://github.com/krunchyMonkey/claude-focus-center/pull/19), pending owner click-through. [#14](https://github.com/krunchyMonkey/claude-focus-center/issues/14) is the owner-only pilot gate.
+- Pilot remaining estimates: 8 engineering hours + 4 owner hours, counted once across these five tickets.
+- Implementation order and guardrails: [docs/PILOT-SPRINT.md](../docs/PILOT-SPRINT.md). Claude kickoff: [docs/AGENT-KICKOFF.md](../docs/AGENT-KICKOFF.md).
+- **No implementation or manual validation was performed by this grooming change.** The prior automated results below are historical; do not claim real-session acceptance.
+- Next development action: start #26, then #27, then #28, using an existing worktree when one is available; prepare #18/PR #19 for manual testing.
+
 ## Current checkpoint (roadmap refresh — 2026-10-28)
 
 - Core v0.1 merged to `main` through [PR #17](https://github.com/krunchyMonkey/claude-focus-center/pull/17).
