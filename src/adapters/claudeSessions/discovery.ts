@@ -12,6 +12,8 @@ export interface DiscoveredSession {
   /** From the transcript; undefined when no record within the header budget carried it. */
   cwd?: string;
   gitBranch?: string;
+  /** How the session was started (e.g. `claude-vscode`, `cli`); undefined when the header does not say. */
+  entrypoint?: string;
   /** File modification time; recent activity, not proof that Claude is running. */
   lastActivityAt: string;
   sizeBytes: number;
@@ -157,6 +159,7 @@ export async function discoverSessions(options: DiscoveryOptions): Promise<Disco
       projectDirName: c.projectDirName,
       cwd: header.cwd,
       gitBranch: header.gitBranch,
+      entrypoint: header.entrypoint,
       lastActivityAt: new Date(c.mtimeMs).toISOString(),
       sizeBytes: c.sizeBytes,
     });
@@ -168,10 +171,13 @@ export async function discoverSessions(options: DiscoveryOptions): Promise<Disco
 export interface SessionHeader {
   cwd?: string;
   gitBranch?: string;
+  entrypoint?: string;
 }
 
+const MAX_ENTRYPOINT_CHARS = 64;
+
 /**
- * Reads at most `maxBytes` from the start of a transcript and returns the first cwd/gitBranch found
+ * Reads at most `maxBytes` from the start of a transcript and returns the first cwd/gitBranch/entrypoint found
  * on a complete JSON line. Malformed lines are skipped; nothing else from the records is retained.
  */
 export async function readSessionHeader(filePath: string, maxBytes: number): Promise<SessionHeader> {
@@ -202,7 +208,10 @@ export async function readSessionHeader(filePath: string, maxBytes: number): Pro
     if (header.gitBranch === undefined && typeof record.gitBranch === 'string' && record.gitBranch.length > 0) {
       header.gitBranch = record.gitBranch;
     }
-    if (header.cwd !== undefined && header.gitBranch !== undefined) {
+    if (header.entrypoint === undefined && typeof record.entrypoint === 'string' && /^[A-Za-z0-9._-]+$/.test(record.entrypoint) && record.entrypoint.length <= MAX_ENTRYPOINT_CHARS) {
+      header.entrypoint = record.entrypoint;
+    }
+    if (header.cwd !== undefined && header.gitBranch !== undefined && header.entrypoint !== undefined) {
       break;
     }
   }

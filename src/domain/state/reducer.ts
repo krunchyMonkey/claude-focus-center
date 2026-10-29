@@ -44,7 +44,7 @@ export function applyEvents(state: FocusState, events: readonly NormalizedEvent[
 /** Records metadata for sessions found by discovery (no events needed). */
 export function recordDiscoveredSession(
   state: FocusState,
-  s: { sessionId: string; cwd?: string; transcriptPath: string; gitBranch?: string; lastActivityAt: string },
+  s: { sessionId: string; cwd?: string; transcriptPath: string; gitBranch?: string; entrypoint?: string; lastActivityAt: string },
   now: Date,
 ): void {
   const known = state.sessions[s.sessionId];
@@ -57,6 +57,7 @@ export function recordDiscoveredSession(
     cwd: s.cwd ?? known?.cwd,
     transcriptPath: s.transcriptPath,
     gitBranch: s.gitBranch ?? known?.gitBranch,
+    entrypoint: s.entrypoint ?? known?.entrypoint,
     lastEventAt: known?.lastEventAt,
     lastSeenAt: now.toISOString(),
     markers: known?.markers,
@@ -87,6 +88,7 @@ function recordSession(state: FocusState, event: NormalizedEvent, now: Date): vo
     cwd: known?.cwd ?? event.cwd,
     transcriptPath: known?.transcriptPath ?? event.transcriptPath,
     gitBranch: event.gitBranch ?? known?.gitBranch,
+    entrypoint: known?.entrypoint,
     lastEventAt,
     lastSeenAt: now.toISOString(),
     markers: known?.markers,

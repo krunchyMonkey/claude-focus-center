@@ -263,6 +263,65 @@ const tests: Array<[string, () => Promise<void>]> = [
       vscode.window.terminals.forEach((t) => t.dispose());
     }
   }],
+  ['Go to Session focuses the Claude panel for a panel session; a CLI session is never opened there', async () => {
+    const api = await activate();
+    const panelId = '00000000-0000-4000-8000-0000000000b1';
+    const cliId = '00000000-0000-4000-8000-0000000000b2';
+    const { project } = await addSessions(api, [[panelId, 'claude-vscode'], [cliId, 'cli']]);
+    assert.equal(api.getState().sessions[panelId]?.entrypoint, 'claude-vscode');
+    assert.equal(api.getState().sessions[cliId]?.entrypoint, 'cli');
+    assert.ok(project);
+
+    const opened: unknown[] = [];
+    const fakePanel = vscode.commands.registerCommand('claude-vscode.editor.open', (id: unknown) => { opened.push(id); });
+    try {
+      const panel = await vscode.commands.executeCommand<{ via: string }>('focusCenter.focusSession', { sessionId: panelId });
+      assert.equal(panel.via, 'claude-panel');
+      assert.deepEqual(opened, [panelId]);
+
+      const cli = await vscode.commands.executeCommand<{ via: string; reason?: string }>('focusCenter.focusSession', { sessionId: cliId });
+      assert.deepEqual(cli, { via: 'prompt', reason: 'external-cli' });
+      assert.deepEqual(opened, [panelId], 'the Claude panel was not opened for a CLI session');
+      assert.equal(vscode.window.terminals.length, 0, 'nothing was resumed without the user choosing to');
+
+      const none = await vscode.commands.executeCommand<{ via: string; reason?: string }>('focusCenter.focusSession', { sessionId: undefined });
+      assert.deepEqual(none, { via: 'cancelled', reason: 'no-session' });
+    } finally {
+      fakePanel.dispose();
+    }
+  }],
+  ['Go to Session resumes once, then reuses that terminal; it also falls back when the panel command fails', async () => {
+    const api = await activate();
+    const id = '00000000-0000-4000-8000-0000000000b3';
+    const { restoreCli } = await addSessions(api, [[id, 'claude-vscode']], true);
+    const before = vscode.window.terminals.length;
+    try {
+      // No Claude Code extension in the test host: the panel command is missing, so it resumes.
+      assert.ok(!(await vscode.commands.getCommands(true)).includes('claude-vscode.editor.open'));
+      const first = await vscode.commands.executeCommand<{ via: string }>('focusCenter.focusSession', { sessionId: id });
+      assert.equal(first.via, 'resume');
+      assert.equal(vscode.window.terminals.length, before + 1);
+
+      // Second click focuses the terminal we launched instead of starting another resume.
+      const second = await vscode.commands.executeCommand<{ via: string }>('focusCenter.focusSession', { sessionId: id });
+      assert.equal(second.via, 'terminal');
+      assert.equal(vscode.window.terminals.length, before + 1);
+
+      // Once that terminal is gone, a failing panel command falls back to resume as well.
+      vscode.window.terminals.forEach((t) => t.dispose());
+      await waitFor(async () => vscode.window.terminals.length === 0);
+      const broken = vscode.commands.registerCommand('claude-vscode.editor.open', () => { throw new Error('panel unavailable'); });
+      try {
+        const third = await vscode.commands.executeCommand<{ via: string }>('focusCenter.focusSession', { sessionId: id });
+        assert.equal(third.via, 'resume');
+      } finally {
+        broken.dispose();
+      }
+    } finally {
+      await restoreCli();
+      vscode.window.terminals.forEach((t) => t.dispose());
+    }
+  }],
   ['Refresh and Diagnostics work when no sessions are visible', async () => {
     const api = await activate();
     await setExcluded([...Object.values(SYNTHETIC_REPOS), path.join(String(process.env.CLAUDE_CONFIG_DIR), 'real-project')]);
@@ -459,6 +518,25 @@ async function installedHook(api: FocusCenterApi): Promise<string> {
   const script = await copyHookScripts(path.join(__dirname, '..', '..', 'hook'), path.dirname(api.statePath));
   await writeScopeFile(path.dirname(script), currentScope());
   return script;
+}
+
+/** Writes sessions in a real project folder (so resume can start) and refreshes; optionally points claudePath at a fake CLI. */
+async function addSessions(api: FocusCenterApi, specs: Array<[string, string]>, fakeCli = false): Promise<{ project: string; restoreCli: () => Promise<void> }> {
+  const root = String(process.env.CLAUDE_CONFIG_DIR);
+  const project = path.join(root, 'real-project');
+  await fs.mkdir(project, { recursive: true });
+  await writeSessions(path.join(root, 'projects'), specs.map(([sessionId, entrypoint]) => ({ sessionId, cwd: project, gitBranch: 'main', entrypoint, mtime: Math.floor(Date.now() / 1000) })));
+  await vscode.commands.executeCommand('focusCenter.refresh');
+  for (const [sessionId] of specs) {
+    assert.ok(api.getState().sessions[sessionId], `session ${sessionId} discovered`);
+  }
+  if (fakeCli) {
+    const fake = path.join(root, process.platform === 'win32' ? 'fake claude.cmd' : 'fake-claude.sh');
+    await fs.writeFile(fake, process.platform === 'win32' ? '@echo off\r\n' : '#!/bin/sh\n');
+    await fs.chmod(fake, 0o755);
+    await vscode.workspace.getConfiguration('focusCenter').update('claudePath', fake, vscode.ConfigurationTarget.Global);
+  }
+  return { project, restoreCli: async () => { await vscode.workspace.getConfiguration('focusCenter').update('claudePath', undefined, vscode.ConfigurationTarget.Global); } };
 }
 
 async function activate(): Promise<FocusCenterApi> {

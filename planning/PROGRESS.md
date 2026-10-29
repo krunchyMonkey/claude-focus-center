@@ -269,6 +269,13 @@ This file records **verified facts**, not inferred implementation status. Follow
 - Not verified: Copilot's re-review; two real VS Code windows at once (simulated with a foreign lock file); the lock under a real suspend/resume; real Claude Code sessions and hooks (owner pilot).
 - Merged-in note: a parallel session added issue #18 (click an item to go to its session, `a61827e`) and its checkpoint above; those changes are untouched.
 
+### 2026-10-28 — Issue #18 / Go to Session: tests and CLI-session handling
+- Status: **Automated criteria met; owner click-through pending.** Branch `feat/18-focus-session` (from `main` 4da6992).
+- Changed: transcript `entrypoint` is read in the discovery header (same path as `gitBranch`; value must match `[A-Za-z0-9._-]{1,64}`), stored on `SessionRecord.entrypoint`, kept across later events and discovery passes, and accepted by state validation. `focusCenter.focusSession` now treats a session whose entrypoint is not `claude-vscode` as started outside VS Code: it does not open a Claude panel (that would fork the live conversation), shows "Resume in New Terminal" as an explicit choice, and returns `{ via: 'prompt', reason: 'external-cli' }`. Unknown entrypoint behaves as before (panel first).
+- Checks actually run: `npm run typecheck` 0 errors; `npm run test:unit` 211/211 (new: header/discovery entrypoint incl. unsafe value ignored; state carry-over and validation); `npm run test:host` 24/24 (new: panel session → `claude-vscode.editor.open <id>` called once; CLI session → not called, nothing resumed, prompt outcome; no session → cancelled; resume once → second click reuses the terminal with no new terminal; failing panel command falls back to resume); `npm run test:acceptance` 7/7 → 6/6; `npm run test:vsix` 1/1. The host tests register a fake `claude-vscode.editor.open` because the test host runs with extensions disabled.
+- Not verified: the real Claude Code extension's `claude-vscode.editor.open` (focuses an existing panel for the session, per its source in 2.1.310, but not exercised); a person clicking an item in the UI; sessions whose transcript has no `entrypoint` (treated as panel sessions).
+- Next action: owner click-through (checklist in the PR); then close #18.
+
 ## Checkpoint template (copy for each completed issue)
 
 ```markdown

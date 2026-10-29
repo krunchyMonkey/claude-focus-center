@@ -86,6 +86,17 @@ test('store round-trips state and survives a simulated restart', async () => {
   assert.equal(applyEvents(loaded.state, [ev(1), ev(2)], now).applied.length, 0);
 });
 
+test('entrypoint is recorded by discovery, survives later events, and passes state validation', () => {
+  const s = emptyState();
+  recordDiscoveredSession(s, { sessionId: 's1', transcriptPath: '/synthetic/t.jsonl', entrypoint: 'cli', lastActivityAt: now.toISOString() }, now);
+  applyEvents(s, [ev(1, { sessionId: 's1', id: 'hook:s1:1' })], now);
+  assert.equal(s.sessions.s1.entrypoint, 'cli');
+  // A later discovery pass that did not see the header keeps what we knew.
+  recordDiscoveredSession(s, { sessionId: 's1', transcriptPath: '/synthetic/t.jsonl', lastActivityAt: now.toISOString() }, now);
+  assert.equal(s.sessions.s1.entrypoint, 'cli');
+  assert.equal(validateState(JSON.parse(JSON.stringify(s))).ok, true);
+});
+
 test('a second save keeps the previous good copy as .bak and leaves no temp files', async () => {
   const d = await dir();
   const store = new JsonFileStore(path.join(d, 'state.json'));

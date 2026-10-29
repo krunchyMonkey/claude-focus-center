@@ -103,7 +103,7 @@ function nestedProblems(state: Record<string, unknown>): string[] {
 function isSession(value: unknown, id: string): boolean {
   return isObject(value) && value.sessionId === id && value.source === 'claude-local' && typeof value.lastSeenAt === 'string'
     && optionalString(value.cwd) && optionalString(value.repoRoot) && optionalString(value.transcriptPath) && optionalString(value.gitBranch)
-    && optionalString(value.lastEventAt) && (value.workItemHints === undefined || isStringArray(value.workItemHints))
+    && optionalString(value.entrypoint) && optionalString(value.lastEventAt) && (value.workItemHints === undefined || isStringArray(value.workItemHints))
     && (value.markers === undefined || isMarkers(value.markers));
 }
 

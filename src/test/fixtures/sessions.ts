@@ -9,6 +9,8 @@ export interface FixtureSession {
   sessionId: string;
   cwd: string;
   gitBranch?: string;
+  /** Written into every default record, as Claude Code does (`claude-vscode`, `cli`, ...). */
+  entrypoint?: string;
   /** Seconds since epoch used for the file mtime. */
   mtime: number;
   /** Raw lines to write instead of the default synthetic records. */
@@ -45,7 +47,7 @@ export function syntheticUuid(n: number): string {
 
 /** Records shaped like Claude Code transcript lines; the first carries no cwd, as real summaries do. */
 export function defaultLines(s: FixtureSession): string[] {
-  const common = { sessionId: s.sessionId, cwd: s.cwd, gitBranch: s.gitBranch, version: '2.0.0' };
+  const common = { sessionId: s.sessionId, cwd: s.cwd, gitBranch: s.gitBranch, entrypoint: s.entrypoint, version: '2.0.0' };
   return [
     JSON.stringify({ type: 'summary', summary: 'Synthetic session', leafUuid: `${s.sessionId}-leaf` }),
     JSON.stringify({ ...common, type: 'user', uuid: `${s.sessionId}-u1`, parentUuid: null, timestamp: new Date(s.mtime * 1000).toISOString(), message: { role: 'user', content: 'Synthetic request.' } }),

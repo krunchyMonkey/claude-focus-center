@@ -106,6 +106,20 @@ test('header read respects the byte budget and ignores a cut-off line', async ()
   assert.deepEqual(await readSessionHeader(file, 4096), { cwd: '/synthetic/late' });
 });
 
+test('header read and discovery report how a session was started; unsafe values are ignored', async () => {
+  const r = await root();
+  const [panel, cli] = tenSessions();
+  await writeSessions(r, [{ ...panel, entrypoint: 'claude-vscode' }, { ...cli, entrypoint: 'cli' }]);
+  const found = await discoverSessions({ root: r });
+  const byId = new Map(found.sessions.map((s) => [s.sessionId, s]));
+  assert.equal(byId.get(panel.sessionId)?.entrypoint, 'claude-vscode');
+  assert.equal(byId.get(cli.sessionId)?.entrypoint, 'cli');
+
+  const file = path.join(r, 'e.jsonl');
+  await fs.writeFile(file, `${JSON.stringify({ entrypoint: 'bad value; calc' })}\n${JSON.stringify({ cwd: '/synthetic/x' })}\n`);
+  assert.deepEqual(await readSessionHeader(file, 4096), { cwd: '/synthetic/x' });
+});
+
 test('duplicate session ids keep the newest file and report the other', async () => {
   const r = await root();
   const id = syntheticUuid(7);
